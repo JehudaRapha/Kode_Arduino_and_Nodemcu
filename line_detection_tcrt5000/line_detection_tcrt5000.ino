@@ -6,7 +6,7 @@ void setup() {
 }
 
 void loop() {
-  // Read the analog value from the TCRT5000 sensor
+  // Read the analog value from the TCRT5000 sensor untuk sensor
   int sensorValue = analogRead(TCRT5000_PIN);
 
   // Print the sensor value to the serial monitor
