@@ -37,7 +37,7 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-const int ledPin = D1;
+// const int ledPin = D1;
 
 String getValue(String data, char separator, int index) {
   int found = 0;
@@ -111,8 +111,8 @@ void setup() {
   if (!Firebase.RTDB.beginStream(&fbdo, "/value"))
     Serial.printf("Stream begin error: %s\n\n", fbdo.errorReason().c_str());
 
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);
+  // pinMode(ledPin, OUTPUT);
+  // digitalWrite(ledPin, LOW);
 }
 
 void loop() {
