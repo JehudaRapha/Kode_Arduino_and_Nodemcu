@@ -1,6 +1,6 @@
 #include <SoftwareSerial.h>
 
-SoftwareSerial myserial(10, 11); // RX, TX
+SoftwareSerial myserial(2, 3); // RX, TX
 const int ledPin = 13; // Ganti dengan pin yang sesuai pada board Anda
 const int relayPin = 7; // Ganti dengan pin relay pada board Anda
 
