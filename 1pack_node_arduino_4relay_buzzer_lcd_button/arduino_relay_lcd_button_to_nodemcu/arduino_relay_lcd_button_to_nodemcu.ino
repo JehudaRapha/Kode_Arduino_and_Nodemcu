@@ -1,5 +1,8 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial mySerial(12, 13); // RX, TX
 
 // Inisialisasi objek LCD dengan alamat I2C
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -18,7 +21,7 @@ int buzzerVolume = 100; // Volume default buzzer (0 - 255)
 
 int lastButtonState = LOW;
 unsigned long buttonPressTime = 0;
-unsigned long lastRefreshTime = 0; 
+unsigned long lastRefreshTime = 0;
 bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
@@ -28,6 +31,7 @@ enum MenuState {SELAMAT_DATANG, MENU, ES_JERUK, ES_COKLAT, ES_CINCAU, ES_KOPI}; 
 MenuState menuState = SELAMAT_DATANG; // Menandai status tampilan saat ini
 
 void setup() {
+  mySerial.begin(9600);
   // Inisialisasi LCD
   lcd.init();
   lcd.backlight();
@@ -238,6 +242,11 @@ void loop() {
 
         delay(3000); // Menunggu 3000 ms (3 detik) sebelum kembali ke tampilan awal
 
+        // Mengirim pesan melalui komunikasi serial
+        mySerial.println("Es Jeruk Telah Terjual");
+        Serial.println("Es Jeruk Telah Terjual"); // Tampilkan pesan di Serial Monitor
+
+
         // Kembali ke tampilan awal
         lcd.clear();
         lcd.setCursor(1, 0);
@@ -276,6 +285,9 @@ void loop() {
 
         delay(3000); // Menunggu 3000 ms (3 detik) sebelum kembali ke tampilan awal
 
+        mySerial.println("Es Coklat Telah Terjual");
+        Serial.println("Es Coklat Telah Terjual"); // Tampilkan pesan di Serial Monitor
+
         // Kembali ke tampilan awal
         lcd.clear();
         lcd.setCursor(1, 0);
@@ -312,6 +324,9 @@ void loop() {
 
         delay(3000); // Menunggu 3000 ms (3 detik) sebelum kembali ke tampilan awal
 
+        mySerial.println("Es Cincau Telah Terjual");
+        Serial.println("Es Cincau Telah Terjual"); // Tampilkan pesan di Serial Monitor
+
         // Kembali ke tampilan awal
         lcd.clear();
         lcd.setCursor(1, 0);
@@ -347,6 +362,9 @@ void loop() {
         digitalWrite(relayPin4, HIGH); // Mematikan relay setelah 1000 ms
 
         delay(3000); // Menunggu 3000 ms (3 detik) sebelum kembali ke tampilan awal
+
+        mySerial.println("Es Kopi Telah Terjual");
+        Serial.println("Es Kopi Telah Terjual"); // Tampilkan pesan di Serial Monitor
 
         // Kembali ke tampilan awal
         lcd.clear();
