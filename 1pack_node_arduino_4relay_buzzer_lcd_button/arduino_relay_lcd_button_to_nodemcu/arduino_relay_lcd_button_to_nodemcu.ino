@@ -16,6 +16,9 @@ const int relayPin2 = 6; // Pin untuk relay 2
 const int relayPin3 = 7; // Pin untuk relay 3
 const int relayPin4 = 8; // Pin untuk relay 4
 
+#define trigPin 11;
+#define echoPin 10;
+
 const int buzzerPin = 9; // Pin untuk buzzer
 int buzzerVolume = 100; // Volume default buzzer (0 - 255)
 
@@ -62,6 +65,10 @@ void setup() {
 
   // Atur pin buzzer sebagai output
   pinMode(buzzerPin, OUTPUT);
+
+  // Atur pin sensor ultrasonik
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
 }
 
 void loop() {
