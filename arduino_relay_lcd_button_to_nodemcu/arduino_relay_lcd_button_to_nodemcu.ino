@@ -18,6 +18,7 @@ int buzzerVolume = 100; // Volume default buzzer (0 - 255)
 
 int lastButtonState = LOW;
 unsigned long buttonPressTime = 0;
+unsigned long lastRefreshTime = 0; 
 bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
@@ -64,6 +65,19 @@ void loop() {
   int buttonState = digitalRead(buttonPin);
   int buttonState2 = digitalRead(buttonPin2);
   int buttonState3 = digitalRead(buttonPin3); // Baca status tombol ketiga
+
+  // Refresh setiap 10 detik
+  if (millis() - lastRefreshTime > 10000) {
+    lastRefreshTime = millis();
+    lcd.clear();
+    lcd.setCursor(1, 0);
+    lcd.print("Selamat Datang");
+    lcd.setCursor(3, 1);
+    lcd.print("Pilih Menu");
+    menuState = SELAMAT_DATANG; // Mengembalikan menuState ke SELAMAT_DATANG
+    Serial.println("Selamat Datang");
+    Serial.println("Pilih Menu");
+  }
 
   // Cek tombol 1 (Next)
   if (buttonState == LOW) {
@@ -231,6 +245,8 @@ void loop() {
         lcd.setCursor(3, 1);
         lcd.print("Pilih Menu");
         menuState = SELAMAT_DATANG; // Mengembalikan menuState ke SELAMAT_DATANG
+        Serial.println("Selamat Datang");
+        Serial.println("Pilih Menu");
         break;
 
 
@@ -267,6 +283,8 @@ void loop() {
         lcd.setCursor(3, 1);
         lcd.print("Pilih Menu");
         menuState = SELAMAT_DATANG; // Mengembalikan menuState ke SELAMAT_DATANG
+        Serial.println("Selamat Datang");
+        Serial.println("Pilih Menu");
         break;
       case ES_CINCAU:
         // Menampilkan pesan sedang diproses dan harap tunggu
@@ -301,6 +319,8 @@ void loop() {
         lcd.setCursor(3, 1);
         lcd.print("Pilih Menu");
         menuState = SELAMAT_DATANG; // Mengembalikan menuState ke SELAMAT_DATANG
+        Serial.println("Selamat Datang");
+        Serial.println("Pilih Menu");
         break;
       case ES_KOPI:
         // Menampilkan pesan sedang diproses dan harap tunggu
@@ -335,6 +355,8 @@ void loop() {
         lcd.setCursor(3, 1);
         lcd.print("Pilih Menu");
         menuState = SELAMAT_DATANG; // Mengembalikan menuState ke SELAMAT_DATANG
+        Serial.println("Selamat Datang");
+        Serial.println("Pilih Menu");
         break;
     }
   }
