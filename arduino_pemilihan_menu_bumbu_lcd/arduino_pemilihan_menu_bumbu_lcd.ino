@@ -7,14 +7,14 @@ SoftwareSerial mySerial(12, 13); // RX, TX
 // Inisialisasi objek LCD dengan alamat I2C
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-const int buttonPin = 2; // Pin untuk tombol pendorong
-const int buttonPin2 = 3; // Pin untuk tombol pendorong
-const int buttonPin3 = 4;
+const int buttonPin = 6; // Pin untuk tombol pendorong
+const int buttonPin2 = 8; // Pin untuk tombol pendorong
+const int buttonPin3 = 7;
 
-const int relayPin1 = 5; // Pin untuk relay 1
-const int relayPin2 = 6; // Pin untuk relay 2
-const int relayPin3 = 7; // Pin untuk relay 3
-const int relayPin4 = 8; // Pin untuk relay 4
+const int relayPin1 = 2; // Pin untuk relay 1
+const int relayPin2 = 3; // Pin untuk relay 2
+const int relayPin3 = 4; // Pin untuk relay 3
+const int relayPin4 = 5; // Pin untuk relay 4
 
 const int buzzerPin = 9; // Pin untuk buzzer
 int buzzerVolume = 50; // Volume default buzzer (0 - 255)
