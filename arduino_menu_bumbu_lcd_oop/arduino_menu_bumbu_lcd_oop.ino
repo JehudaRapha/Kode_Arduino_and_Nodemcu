@@ -168,47 +168,65 @@ class MenuManager {
           delay(5000);
           break;
         case 1:
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Manis Selected");
           delay(2000);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Proses Potong");
           lcd.setCursor(0, 1);
           lcd.print("Kentang");
-          delay(2000);
+          for (int i = 0; i < 4; ++i) { // Lakukan gerakan servo dua kali
+            // Gerakan servo dari 0 derajat hingga 180 derajat
+            for (int angle = 0; angle <= 180; angle += 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+
+            // Kembalikan servo dari 180 derajat ke 0 derajat
+            for (int angle = 180; angle >= 0; angle -= 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+          }
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Potong Kentang");
           lcd.setCursor(0, 1);
           lcd.print("Selesai");
           delay(2000);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Lanjut Goreng");
           lcd.setCursor(0, 1);
           lcd.print("Kentang");
-          delay(2000);
+          for (int i = 0; i < 2; ++i) { // Lakukan gerakan servo dua kali
+            // Gerakan servo dari 0 derajat hingga 180 derajat
+            for (int angle = 0; angle <= 180; angle += 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+
+            // Kembalikan servo dari 180 derajat ke 0 derajat
+            for (int angle = 180; angle >= 0; angle -= 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+          }
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Goreng Kentang");
           lcd.setCursor(0, 1);
           lcd.print("Selesai");
           delay(2000);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Proses Takar");
           lcd.setCursor(0, 1);
           lcd.print("Bumbu Manis");
@@ -216,56 +234,73 @@ class MenuManager {
           delay(2000);
           digitalWrite(relay1, HIGH);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Kentang Goreng");
           lcd.setCursor(0, 1);
           lcd.print("Siap Dimakan!");
           delay(5000);
           break;
         case 2:
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Gurih Selected");
           delay(2000);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Proses Potong");
           lcd.setCursor(0, 1);
           lcd.print("Kentang");
-          delay(2000);
+          for (int i = 0; i < 4; ++i) { // Lakukan gerakan servo dua kali
+            // Gerakan servo dari 0 derajat hingga 180 derajat
+            for (int angle = 0; angle <= 180; angle += 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+
+            // Kembalikan servo dari 180 derajat ke 0 derajat
+            for (int angle = 180; angle >= 0; angle -= 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+          }
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Potong Kentang");
           lcd.setCursor(0, 1);
           lcd.print("Selesai");
           delay(2000);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Lanjut Goreng");
           lcd.setCursor(0, 1);
           lcd.print("Kentang");
-          delay(2000);
+          for (int i = 0; i < 2; ++i) { // Lakukan gerakan servo dua kali
+            // Gerakan servo dari 0 derajat hingga 180 derajat
+            for (int angle = 0; angle <= 180; angle += 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+
+            // Kembalikan servo dari 180 derajat ke 0 derajat
+            for (int angle = 180; angle >= 0; angle -= 5) {
+              myServo.write(angle);
+              delay(10); // Delay untuk setiap langkah gerakan
+            }
+          }
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Goreng Kentang");
           lcd.setCursor(0, 1);
           lcd.print("Selesai");
           delay(2000);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Proses Takar");
           lcd.setCursor(0, 1);
           lcd.print("Bumbu Gurih");
@@ -273,9 +308,8 @@ class MenuManager {
           delay(2000);
           digitalWrite(relay1, HIGH);
           lcd.clear();
-          analogWrite(buzzerPin, buzzerVolume);
+          beep();
           delay(200); // Anti bouncing
-          analogWrite(buzzerPin, 0);
           lcd.print("Kentang Goreng");
           lcd.setCursor(0, 1);
           lcd.print("Siap Dimakan!");
