@@ -14,7 +14,7 @@ unsigned long lastFlowTime = 0;
 
 bool waterFullNotified = false;
 bool relayState = false;
-unsigned long relayOnDuration = 300000;  // 5 seconds
+unsigned long relayOnDuration = 3000;  // 5 seconds
 
 void setup() {
   Serial.begin(115200);

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CAL</title>
+  </head>
+  <script src="/socket.io/socket.io.js"></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"
+    integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+  <script>
+    const socket = io();
+    socket.on('data', ({ data }) => {
+      console.log(data);
+    });
+
+    function Arduino(data) {
+      if (data == '1') {
+        var img = $('<img>');
+        img.attr('src', '/images/led_on.jpg');
+        img.attr('alt', 'Image description');
+        $('#imageContainer').html(img); // Replace the content of #imageContainer with the new image
+        console.log('on');
+      } else {
+        var img = $('<img>');
+        img.attr('src', '/images/led_off.jpg');
+        img.attr('alt', 'Image description');
+        $('#imageContainer').html(img); // Replace the content of #imageContainer with the new image
+        console.log('off');
+      }
+      const postData = {
+        data: data,
+      };
+      const apiUrl = 'http://localhost:3000/arduinoApi';
+
+      $.ajax({
+        url: apiUrl,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(postData),
+        success: function (data) {
+          console.log(data);
+        },
+        error: function (xhr, status, error) {
+          console.error('There was a problem with the AJAX request:', error);
+        },
+      });
+    }
+  </script>
+  <body>
+    TESTING CONTROL ARDUINO LED
+    <p id="data"></p>
+    <button class="on_btn" onClick="Arduino('1')">Nyalakan Lampu</button>
+    <button class="off_btn" onClick="Arduino('2')">Matikan Lampu</button>
+
+    <!-- <img src="/images/led_on.jpg" alt="bulp_on" id="bulp_on" />
+    <img src="/images/led_off.jpg" alt="bulp_off" id="bulp_off" /> -->
+    <div id="imageContainer"></div>
+  </body>
+</html>

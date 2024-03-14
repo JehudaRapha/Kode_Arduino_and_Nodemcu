@@ -1,38 +1,28 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
+#include <WiFiClient.h> // Include the WiFiClient library
 #include <SoftwareSerial.h>
-#include <ArduinoJson.h>
+
+const char* ssid = "nanda";
+const char* password = "nanda123";
 
 SoftwareSerial myserial(D1, D2);
-const char* ssid = "iot";
-const char* password = "12345678";
-
-//Your Domain name with URL path or IP address with path
-String serverName = "http://192.168.1.10:8000/api/data";
-
-// the following variables are unsigned longs because the time, measured in
-// milliseconds, will quickly become a bigger number than can be stored in an int.
-unsigned long lastTime = 0;
-// Timer set to 10 minutes (600000)
-//unsigned long timerDelay = 600000;
-// Set timer to 5 seconds (5000)
-unsigned long timerDelay = 5000;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200); // Starts the serial communication
+  WiFi.begin(ssid, password); // Connects to the WiFi
   myserial.begin(9600);
-  WiFi.begin(ssid, password);
-  Serial.println("Connecting");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
 
-  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
+  while (WiFi.status() != WL_CONNECTED) { // Waits for the connection to establish
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+
+  while (!Serial) {
+    ;
+  }
+
+  Serial.println("Connected to the WiFi network");
 }
 
 String getValue(String data, char separator, int index) {
@@ -49,49 +39,44 @@ String getValue(String data, char separator, int index) {
   }
   return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
-
-
 void loop() {
-  // Send an HTTP POST request depending on timerDelay
   if (myserial.available() > 0) {
-    String data = myserial.readStringUntil('\n');
-    bool sensorDetected = false;
-    for (int i = 0; i < 10; i++) {
-      String slot = getValue(data, '|', i);
-      if (slot == "1") {       // Send data to the server;
-        if (WiFi.status() == WL_CONNECTED) {
-          WiFiClient client;
-          HTTPClient http;
-          String slotName = "slot" + String(i + 1);
-          String serverPath = serverName + "/" + slotName + "/" + slot;
+    String data = myserial.readStringUntil('\n'); // Read the data
+    data.trim(); // Trim the data to remove possible newline or carriage return characters
 
-          // Your Domain name with URL path or IP address with path
-          http.begin(client, serverPath.c_str());
+    String statusSlot = getValue(data, '|', 0); // Get the namaSlot value
+    statusSlot.trim(); // Trim the namaSlot value
 
-          // If you need Node-RED/server authentication, insert user and password below
-          //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
+    String idSlot = getValue(data, '|', 1); // Get the value
+    idSlot.trim(); // Trim the value
 
-          // Send HTTP GET request
-          int httpResponseCode = http.GET();
+    // Debug prints
+    Serial.print("status Slot: ");
+    Serial.println(statusSlot);
+    Serial.print("Value: ");
+    Serial.println(idSlot);
 
-          if (httpResponseCode > 0) {
-            Serial.print("HTTP Response code: ");
-            Serial.println(httpResponseCode);
-            String payload = http.getString();
-            Serial.println(payload);
-          }
-          else {
-            Serial.print("Error code: ");
-            Serial.println(httpResponseCode);
-          }
-          // Free resources
-          http.end();
-        }
-        else {
-          Serial.println("WiFi Disconnected");
-        }
-        sensorDetected = true;
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClient client;
+      HTTPClient http;
+      String url = "http://192.168.1.28:8000/api/sensorIr/parked/" + statusSlot + "/" + idSlot;
+
+      // Debug print for the URL
+      Serial.print("URL: ");
+      Serial.println(url);
+
+      http.begin(client, url); // Specify request destination
+
+      int httpCode = http.GET(); // Send the request
+
+      if (httpCode > 0) {
+        String payload = http.getString(); // Get the request response payload
+        Serial.println(httpCode); // Prints the HTTP status code
+        Serial.println(payload); // Prints the response payload
+      } else {
+        Serial.println("Error on HTTP request");
       }
+      http.end(); // Close connection
     }
   }
 }
