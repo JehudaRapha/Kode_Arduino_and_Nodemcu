@@ -28,18 +28,18 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
   receivedData();
-  if ((millis() - oldTime) > 1000) {
+  if ((currentMillis - oldTime) > 1000) {
     detachInterrupt(digitalPinToInterrupt(sensorPin));
     calculateFlowRate();  // Menghitung laju aliran air
     updateFlow();         // Memperbarui total air yang telah mengalir
     controlRelay();       // Mengontrol relay berdasarkan kondisi aliran air
     sendTotalMilliLitres(); // Mengirim totalMilliLitres ke NodeMCU
+    sendFlowRate(); //mengirim flowRate ke NodeMcu
     resetPulseCounter();  // Reset hitungan pulsa
     attachInterrupt(digitalPinToInterrupt(sensorPin), pulseCounter, FALLING);
   }
   displayDataOnMonitor();
   openRelayEveryHour();  // Buka relay setiap 1 jam
-
 }
 
 void initPins() {
@@ -130,21 +130,29 @@ void receivedData() {
     Serial.println(state);
   }
 }
+
 void displayDataOnMonitor() {
   Serial.print("Air: ");
   Serial.print(totalMilliLitres);
   Serial.println(" ml    ");
+  Serial.print("Kecepatan air: ");
+  Serial.print(flowMilliLitres * 60 * 60 / 1000); // Convert ml/s to ml/h
+  Serial.println(" ml/h");
   delay(200);
   if (totalMilliLitres >= 20000) {
     Serial.print("Air telah penuh");
   }
 }
 
-
-
 void sendTotalMilliLitres() {
   myserial.print(totalMilliLitres);
   myserial.print("\n"); // Kirim newline untuk menandai akhir pesan
+}
+
+void sendFlowRate() {
+//  myserial.print("Kecepatan air: ");
+  myserial.print(flowMilliLitres * 60 * 60 / 1000); // Convert ml/s to ml/h
+//  myserial.print("ml/h\n");
 }
 
 void resetPulseCounter() {

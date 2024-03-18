@@ -30,10 +30,9 @@
 #define BLYNK_PRINT Serial
 
 /* Fill in information from Blynk Device Info here */
-#define BLYNK_TEMPLATE_ID "TMPL66OovWSuQ"
-#define BLYNK_TEMPLATE_NAME "Quickstart Template"
-#define BLYNK_AUTH_TOKEN "Fz8nlPI5OPrqXHr0Xcxa8mMZ67uxRO1b"
-
+#define BLYNK_TEMPLATE_ID "TMPL6D_iQaX4b"
+#define BLYNK_TEMPLATE_NAME "IoT Keakuratan Debit Air"
+#define BLYNK_AUTH_TOKEN "Bo2uU0rfqnQU259Nl4iqx5PNPpu0_Mx2"
 
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
@@ -58,19 +57,40 @@ void setup()
   pinMode(relayPin, OUTPUT);
 }
 
+void totalAir() {
+  String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
+  //  Serial.print("Total Yang Mengalir: ");
+  //  Serial.println(data);
+
+  // Kirim data total yang mengalir ke pin virtual V1 di aplikasi Blynk
+  Blynk.virtualWrite(V1, data.toInt()); // Mengubah data menjadi integer sebelum dikirim ke Blynk
+}
+
+void kecepatanAir() {
+  //  String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
+  //  Serial.print("Kecepatan air Mengalir: ");
+  //  Serial.println(data);
+
+  if (myserial.available() > 0) {
+    String data = myserial.readStringUntil('\n');
+    Serial.print("data myserial : ");
+    Serial.println(data);
+    // Kirim data kecepatan air yang mengalir ke pin virtual V3 di aplikasi Blynk
+    Blynk.virtualWrite(V0, data.toInt());
+    //    Serial.print("Terkirim : ");
+    //    Serial.println(data);
+  }
+}
+
+
 void loop() {
   if (myserial.available() > 0) {
-    String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
-    Serial.print("Total Yang Mengalir: ");
-    Serial.println(data);
-
-    // Kirim data ke pin virtual V1 di aplikasi Blynk
-    Blynk.virtualWrite(V1, data.toInt()); // Mengubah data menjadi integer sebelum dikirim ke Blynk
-
-    // Anda dapat menambahkan proses data lebih lanjut di sini jika diperlukan
+    totalAir();
+    kecepatanAir();
   }
   Blynk.run();
 }
+
 
 // Fungsi untuk mengontrol relay berdasarkan data yang diterima dari pin virtual V2 di aplikasi Blynk
 BLYNK_WRITE(V2) {
@@ -79,13 +99,13 @@ BLYNK_WRITE(V2) {
   Serial.println(stateButton);
   myserial.print("state|");
   myserial.print(stateButton);
-  
-  // Sesuaikan pengontrolan relay sesuai dengan nilai yang diterima
-//  if (relayState == 0) {
-//    digitalWrite(relayPin, HIGH); // Matikan relay
-//    Serial.println("Relay dimatikan");
-//  } else {
-//    digitalWrite(relayPin, LOW); // Nyalakan relay
-//    Serial.println("Relay dinyalakan");
-//  }
+
+  // Sesuaikan pengontrolan relay sesuai  dengan nilai yang diterima
+  //  if (relayState == 0) {
+  //    digitalWrite(relayPin, HIGH); // Matikan relay
+  //    Serial.println("Relay dimatikan");
+  //  } else {
+  //    digitalWrite(relayPin, LOW); // Nyalakan relay
+  //    Serial.println("Relay dinyalakan");
+  //  }
 }
