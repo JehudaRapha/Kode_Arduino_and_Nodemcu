@@ -34,7 +34,7 @@
 #define BLYNK_TEMPLATE_NAME "IoT Keakuratan Debit Air"
 #define BLYNK_AUTH_TOKEN "Bo2uU0rfqnQU259Nl4iqx5PNPpu0_Mx2"
 
-#include <ESP8266WiFi.h>
+f#include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 
 #include <SoftwareSerial.h>
@@ -67,9 +67,9 @@ void totalAir() {
 }
 
 void kecepatanAir() {
-  String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
-  Serial.print("Kecepatan air Mengalir: ");
-  Serial.println(data);
+//  String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
+//  Serial.print("Kecepatan air Mengalir: ");
+//  Serial.println(data);
 
   if (myserial.available() > 0) {
     String data = myserial.readStringUntil('\n');

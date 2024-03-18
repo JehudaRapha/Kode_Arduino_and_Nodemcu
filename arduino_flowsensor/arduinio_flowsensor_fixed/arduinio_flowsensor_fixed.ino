@@ -146,13 +146,13 @@ void displayDataOnMonitor() {
 
 void sendTotalMilliLitres() {
   myserial.print(totalMilliLitres);
-  myserial.print("/"); // Kirim newline untuk menandai akhir pesan 
+  myserial.print('\n'); // Kirim newline untuk menandai akhir pesan 
 }
 
 void sendFlowRate() {
 //  myserial.print("Kecepatan air: ");
   myserial.print(flowMilliLitres * 60 * 60 / 1000); // Convert ml/s to ml/h
-  myserial.print("\n"); // Kirim newline untuk menandai akhir pesan
+  myserial.print('\n'); // Kirim newline untuk menandai akhir pesan 
 //  myserial.print("ml/h\n");
 }
 
