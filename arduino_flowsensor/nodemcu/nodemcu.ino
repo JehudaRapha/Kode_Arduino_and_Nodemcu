@@ -59,17 +59,17 @@ void setup()
 
 void totalAir() {
   String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
-  //  Serial.print("Total Yang Mengalir: ");
-  //  Serial.println(data);
+  Serial.print("Total Yang Mengalir: ");
+  Serial.println(data);
 
-  // Kirim data total yang mengalir ke pin virtual V1 di aplikasi Blynk
+  //  Kirim data total yang mengalir ke pin virtual V1 di aplikasi Blynk
   Blynk.virtualWrite(V1, data.toInt()); // Mengubah data menjadi integer sebelum dikirim ke Blynk
 }
 
 void kecepatanAir() {
-  //  String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
-  //  Serial.print("Kecepatan air Mengalir: ");
-  //  Serial.println(data);
+  String data = myserial.readStringUntil('\n'); // Read data from Arduino until newline character
+  Serial.print("Kecepatan air Mengalir: ");
+  Serial.println(data);
 
   if (myserial.available() > 0) {
     String data = myserial.readStringUntil('\n');
