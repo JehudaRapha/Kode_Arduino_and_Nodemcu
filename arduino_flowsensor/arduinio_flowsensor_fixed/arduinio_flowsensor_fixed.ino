@@ -5,6 +5,9 @@ SoftwareSerial myserial(8, 9); // RX TX
 const int sensorPin = 2;
 const int relayPin = 3;
 
+const int buzzerPin = 5;
+int buzzerVolume = 50; // Volume default buzzer (0 - 255)
+
 float calibrationFactor = 11;
 
 volatile byte pulses;
@@ -53,6 +56,7 @@ void initPins() {
   oldTime = millis();
   relayTimer = millis();
   digitalWrite(relayPin, HIGH);  // Matikan relay saat inisialisasi
+  pinMode(buzzerPin, OUTPUT);
 }
 
 void calculateFlowRate() {
@@ -72,12 +76,12 @@ String getValue(String data, char separator, int index) {
   int found = 0;
   int strIndex[] = {0, -1};
   int maxIndex = data.length() - 1;
-  
+
   for (int i = 0; i <= maxIndex && found <= index; i++) {
     if (data.charAt(i) == separator || i == maxIndex) {
       found++;
       strIndex[0] = strIndex[1] + 1;
-      strIndex[1] = (i == maxIndex) ? i+1 : i;
+      strIndex[1] = (i == maxIndex) ? i + 1 : i;
     }
   }
   return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
@@ -114,16 +118,18 @@ void controlRelay() {
 void receivedData() {
   if (myserial.available() > 0) {
     String data = myserial.readStringUntil('\n');
-    String state = getValue(data,'|',0);
-    String value = getValue(data,'|',1);
+    String state = getValue(data, '|', 0);
+    String value = getValue(data, '|', 1);
 
-    if(state == "state" && value == "1"){
+    if (state == "state" && value == "1") {
       Serial.print("relay on");
+      analogWrite(buzzerPin, buzzerVolume);
       digitalWrite(relayPin, LOW);
-    }else if(state == "state" && value == "0"){
+    } else if (state == "state" && value == "0") {
       Serial.print("relay off");
+      analogWrite(buzzerPin, 0);
       digitalWrite(relayPin, HIGH);
-    }else{
+    } else {
       return;
     }
     Serial.print("data blynk : ");
@@ -146,14 +152,14 @@ void displayDataOnMonitor() {
 
 void sendTotalMilliLitres() {
   myserial.print(totalMilliLitres);
-  myserial.print('\n'); // Kirim newline untuk menandai akhir pesan 
+  myserial.print('\n'); // Kirim newline untuk menandai akhir pesan
 }
 
 void sendFlowRate() {
-//  myserial.print("Kecepatan air: ");
+  //  myserial.print("Kecepatan air: ");
   myserial.print(flowMilliLitres * 60 * 60 / 1000); // Convert ml/s to ml/h
-  myserial.print('\n'); // Kirim newline untuk menandai akhir pesan 
-//  myserial.print("ml/h\n");
+  myserial.print('\n'); // Kirim newline untuk menandai akhir pesan
+  //  myserial.print("ml/h\n");
 }
 
 void resetPulseCounter() {
@@ -169,10 +175,12 @@ void openRelayEveryHour() {
   if ((currentMillis - relayTimer) >= 60000) {
     relayTimer = currentMillis;
     if (totalMilliLitres < 1000) {
+      analogWrite(buzzerPin, buzzerVolume);
       digitalWrite(relayPin, LOW);
       relayState = true;
       Serial.print("Air Sdng Mngalir");
       delay(10000);  // Tunda 10 detik
+      analogWrite(buzzerPin, 0);
       digitalWrite(relayPin, HIGH);
       relayState = false;
     }
