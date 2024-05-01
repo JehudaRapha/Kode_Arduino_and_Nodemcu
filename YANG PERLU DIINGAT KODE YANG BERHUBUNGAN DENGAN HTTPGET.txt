@@ -4,3 +4,7 @@ AKTIFKAN SERVER DI VSC DENGAN PERINTAH
 
 HIDUPKAN XAMPP
 = apache, mysql 
+
+1. php artisan make:model KeypadDataTest -mcr //(model,controller,migration)
+2. nulis kode di kontroller controller KeypadDataTestController
+3. nulis kode di route file API
