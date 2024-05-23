@@ -1,41 +1,51 @@
+#include <SoftwareSerial.h>
+SoftwareSerial myserial(2, 3); // RX TX
+
 const int ledPin = 5;
-const int relayPin = 4;
 
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(9600);
+  myserial.begin(9600);
+  
   pinMode(ledPin, OUTPUT);
-  pinMode(relayPin, OUTPUT);
-
   digitalWrite(ledPin, LOW);
-  digitalWrite(relayPin, HIGH);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  const int ledPin = 5;  // Pin untuk LED
-const int relayPin = 4;  // Pin untuk relay
-
-void setup() {
-  pinMode(ledPin, OUTPUT);  // Atur pin LED sebagai output
-  pinMode(relayPin, OUTPUT);  // Atur pin relay sebagai output
-
-  // Matikan LED pada awalnya
-  digitalWrite(ledPin, LOW);
-  // Matikan relay pada awalnya (jika relay memerlukan logika inverted)
-  digitalWrite(relayPin, LOW);
+  receivedData();
 }
 
-void loop() {
-  int relayState = digitalRead(relayPin);  // Baca status relay
+String getValue(String data, char separator, int index) {
+  int found = 0;
+  int strIndex[] = {0, -1};
+  int maxIndex = data.length() - 1;
 
-  // Jika relay mati (LOW), matikan LED
-  if (relayState == LOW) {
-    digitalWrite(ledPin, LOW);
+  for (int i = 0; i <= maxIndex && found <= index; i++) {
+    if (data.charAt(i) == separator || i == maxIndex) {
+      found++;
+      strIndex[0] = strIndex[1] + 1;
+      strIndex[1] = (i == maxIndex) ? i + 1 : i;
+    }
   }
-  // Jika relay hidup (HIGH), hidupkan LED
-  else {
-    digitalWrite(ledPin, HIGH);
-  }
+  return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
+void receivedData() {
+  if (myserial.available() > 0) {
+    String data = myserial.readStringUntil('\n');
+    String state = getValue(data, '|', 0);
+    String value = getValue(data, '|', 1);
+
+    if (state == "state" && value == "1") {
+      digitalWrite(ledPin, HIGH);
+    } else if (state == "state" && value == "0") {
+      digitalWrite(ledPin, LOW);
+    } else {
+      return;
+    }
+    Serial.print("data blynk : ");
+    Serial.println(state);
+  }
 }
