@@ -16,8 +16,8 @@
 #include <ArduinoJson.h>
 
 // Replace with your network credentials
-const char* ssid = "CYBORG_IT";
-const char* password = "12341234";
+const char* ssid = "TOMMY GAS";
+const char* password = "SHENG_TAN";
 
 // Initialize Telegram BOT
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"  // your Bot Token (Get from Botfather)
@@ -40,7 +40,10 @@ unsigned long lastTimeBotRan;
 
 const int relayPin = D2;
 bool relayState = LOW;
+const int sensor = D3;  // Pin for the magnetic contact switch
+int doorState;
 
+String chat_id;
 // Handle what happens when you receive new messages
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -48,7 +51,7 @@ void handleNewMessages(int numNewMessages) {
 
   for (int i=0; i<numNewMessages; i++) {
     // Chat id of the requester
-    String chat_id = String(bot.messages[i].chat_id);
+    chat_id = String(bot.messages[i].chat_id);
     if (chat_id != CHAT_ID){
       bot.sendMessage(chat_id, "Unauthorized user", "");
       continue;
@@ -63,33 +66,41 @@ void handleNewMessages(int numNewMessages) {
     if (text == "/start") {
       String welcome = "Welcome, " + from_name + ".\n";
       welcome += "Use the following commands to control your outputs.\n\n";
-      welcome += "/relay_on to turn GPIO ON \n";
-      welcome += "/relay_off to turn GPIO OFF \n";
-      welcome += "/state to request current GPIO state \n";
+      welcome += "/buka_pintu untuk membuka pintu \n";
+      welcome += "/tutup_pintu untuk menutup pintu \n";
+      welcome += "/cek_pintu untuk cek kondisi pintu \n";
       bot.sendMessage(chat_id, welcome, "");
     }
 
-    if (text == "/relay_on") {
-      bot.sendMessage(chat_id, "Relay state set to ON", "");
+    if (text == "/buka_pintu") {
+      bot.sendMessage(chat_id, "Pintu Telah diBuka!", "");
       relayState = HIGH;
       digitalWrite(relayPin, relayState);
     }
     
-    if (text == "/relay_off") {
-      bot.sendMessage(chat_id, "Relay state set to OFF", "");
+    if (text == "/tutup_pintu") {
+      bot.sendMessage(chat_id, "Pintu telah diTutup!", "");
       relayState = LOW;
       digitalWrite(relayPin, relayState);
     }
     
-    if (text == "/state") {
+    if (text == "/cek_pintu") {
       if (digitalRead(relayPin)){
-        bot.sendMessage(chat_id, "Relay is ON", "");
+        bot.sendMessage(chat_id, "Pintu sedang terbuka!", "");
       }
       else{
-        bot.sendMessage(chat_id, "Relay is OFF", "");
+        bot.sendMessage(chat_id, "Pintu telah tertutup!", "");
       }
     }
   }
+
+  if(relayState == LOW && doorState == 1){  
+        bot.sendMessage(chat_id, "Pintu Dibuka Paksa", "");
+  }
+}
+
+void magnetic_door(){
+  doorState = digitalRead(sensor);
 }
 
 void setup() {
@@ -102,6 +113,7 @@ void setup() {
 
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, relayState);
+  pinMode(sensor, INPUT_PULLUP);
   
   // Connect to Wi-Fi
   WiFi.mode(WIFI_STA);
@@ -118,6 +130,7 @@ void setup() {
 }
 
 void loop() {
+  magnetic_door();
   if (millis() > lastTimeBotRan + botRequestDelay)  {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 
