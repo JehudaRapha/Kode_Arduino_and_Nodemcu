@@ -1,11 +1,3 @@
-/*
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/telegram-control-esp32-esp8266-nodemcu-outputs/
-  
-  Project created using Brian Lough's Universal Telegram Bot Library: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
-  Example based on the Universal Arduino Telegram Bot Library: https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot/blob/master/examples/ESP8266/FlashLED/FlashLED.ino
-*/
-
 #ifdef ESP32
   #include <WiFi.h>
 #else
@@ -37,13 +29,17 @@ UniversalTelegramBot bot(BOTtoken, client);
 // Checks for new messages every 1 second.
 int botRequestDelay = 1000;
 unsigned long lastTimeBotRan;
+unsigned long lastForcedOpenMsgTime = 0;
+int forcedOpenMsgInterval = 2000; // 2 seconds
 
 const int relayPin = D2;
 bool relayState = LOW;
 const int sensor = D3;  // Pin for the magnetic contact switch
 int doorState;
+int lastDoorState = -1;
 
 String chat_id;
+
 // Handle what happens when you receive new messages
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -76,6 +72,13 @@ void handleNewMessages(int numNewMessages) {
       bot.sendMessage(chat_id, "Pintu Telah diBuka!", "");
       relayState = HIGH;
       digitalWrite(relayPin, relayState);
+      
+      // Check if the sensor detects the door is closed
+      if (digitalRead(sensor) == LOW) {
+        bot.sendMessage(chat_id, "Pintu telah tertutup kembali", "");
+        relayState = LOW;
+        digitalWrite(relayPin, relayState);
+      }
     }
     
     if (text == "/tutup_pintu") {
@@ -85,22 +88,24 @@ void handleNewMessages(int numNewMessages) {
     }
     
     if (text == "/cek_pintu") {
-      if (digitalRead(relayPin)){
+      if (digitalRead(sensor) == HIGH){
         bot.sendMessage(chat_id, "Pintu sedang terbuka!", "");
       }
       else{
-        bot.sendMessage(chat_id, "Pintu telah tertutup!", "");
+        bot.sendMessage(chat_id, "Pintu sedang tertutup!", "");
       }
     }
-  }
-
-  if(relayState == LOW && doorState == 1){  
-        bot.sendMessage(chat_id, "Pintu Dibuka Paksa", "");
   }
 }
 
 void magnetic_door(){
   doorState = digitalRead(sensor);
+  if (doorState != lastDoorState) {
+    if (doorState == LOW) {
+      bot.sendMessage(chat_id, "Pintu telah tertutup kembali", "");
+    }
+    lastDoorState = doorState;
+  }
 }
 
 void setup() {
@@ -140,5 +145,10 @@ void loop() {
       numNewMessages = bot.getUpdates(bot.last_message_received + 1);
     }
     lastTimeBotRan = millis();
+  }
+
+  if(relayState == LOW && doorState == 1 && (millis() - lastForcedOpenMsgTime > forcedOpenMsgInterval)){  
+    bot.sendMessage(chat_id, "Pintu Dibuka Paksa", "");
+    lastForcedOpenMsgTime = millis();
   }
 }
