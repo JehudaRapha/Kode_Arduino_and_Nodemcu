@@ -12,7 +12,7 @@ const char* ssid = "CYBORG";
 const char* password = "12341234";
 
 // Initialize Telegram BOT
-#define BOTtoken "7345692542:AAFvBg9diwYw38rHgwrH0r3JYxhodqwv4"  // your Bot Token (Get from Botfather)
+#define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"  // your Bot Token (Get from Botfather)
 
 // Use @myidbot to find out the chat ID of an individual or a group
 #define CHAT_ID "7214692262"
@@ -29,12 +29,16 @@ int botRequestDelay = 3000;
 unsigned long lastTimeBotRan;
 unsigned long lastForcedOpenMsgTime = 0;
 int forcedOpenMsgInterval = 5000; // 5 seconds
+unsigned long lastForceOpenMessageTime = 0; // Timer for sending forced open message
 
 const int relayPin = D2;
 bool relayState = LOW;
 const int sensor = D3;  // Pin for the magnetic contact switch
 int doorState;
 int lastDoorState = -1;
+bool doorOpenedByBot = false;  // Flag to track if the door was opened by the bot
+bool doorClosedByBot = false;
+bool messageSent = false;
 
 String chat_id;
 
@@ -59,27 +63,29 @@ void handleNewMessages(int numNewMessages) {
 
     if (text == "/start") {
       String welcome = "Welcome, " + from_name + ".\n";
-      welcome += "Use the following commands to control your outputs.\n\n";
+      welcome += "Gunakan perintah berikut untuk mengontrol pintu.\n\n";
       welcome += "/buka_pintu untuk membuka pintu \n";
       welcome += "/tutup_pintu untuk menutup pintu \n";
-      welcome += "/cek_pintu untuk cek kondisi pintu \n";
+      welcome += "/cek_status_pintu untuk cek kondisi pintu \n";
       bot.sendMessage(chat_id, welcome, "");
     }
 
     if (text == "/buka_pintu") {
-      bot.sendMessage(chat_id, "Pintu Telah diBuka!", "");
+      bot.sendMessage(chat_id, "Pintu Telah dibuka!", "");
       relayState = HIGH;
+      doorOpenedByBot = true;  // Set flag to true
       digitalWrite(relayPin, relayState);
       lastForcedOpenMsgTime = millis(); // Reset timer when the door is opened
     }
     
     if (text == "/tutup_pintu") {
-      bot.sendMessage(chat_id, "Pintu telah diTutup!", "");
+      bot.sendMessage(chat_id, "Pintu telah ditutup!", "");
       relayState = LOW;
       digitalWrite(relayPin, relayState);
+      doorClosedByBot = true;
     }
     
-    if (text == "/cek_pintu") {
+    if (text == "/cek_status_pintu") {
       if (digitalRead(sensor) == HIGH) {
         bot.sendMessage(chat_id, "Pintu sedang terbuka!", "");
       } else {
@@ -93,7 +99,9 @@ void magnetic_door() {
   doorState = digitalRead(sensor);
   if (doorState != lastDoorState) {
     if (doorState == LOW) {
-      bot.sendMessage(chat_id, "Pintu telah tertutup kembali", "");
+      bot.sendMessage(chat_id, "Terimakasih telah menutup pintu kembali!", "");
+      doorOpenedByBot = false;  // Reset the flag after the door is closed
+      doorClosedByBot = true;
     }
     lastDoorState = doorState;
   }
@@ -123,8 +131,18 @@ void setup() {
     Serial.println("Connecting to WiFi..");
   }
   // Print ESP32 Local IP Address
-  Serial.println(WiFi.localIP());
+  Serial.println("Connected to WiFi");
+  Serial.println("IP Address: " + WiFi.localIP().toString());
+  
+  // Test Telegram Bot Connection
+  Serial.println("Testing Telegram Bot Connection...");
+  if (bot.getMe()) {
+    Serial.println("Bot is connected to Telegram successfully!");
+  } else {
+    Serial.println("Failed to connect to Telegram.");
+  }
 }
+
 void loop() {
   // Check WiFi connection
   if (WiFi.status() != WL_CONNECTED) {
@@ -134,6 +152,7 @@ void loop() {
       delay(1000);
       Serial.println("Reconnecting to WiFi...");
     }
+    Serial.println("Reconnected to WiFi");
   }
 
   magnetic_door();
@@ -147,9 +166,25 @@ void loop() {
     lastTimeBotRan = millis();
   }
 
-  if (relayState == HIGH && doorState == LOW && (millis() - lastForcedOpenMsgTime > forcedOpenMsgInterval)) {
+  // Automatically close the door after 5 seconds if relay is on and the door is detected as closed
+  if (relayState == HIGH && digitalRead(sensor) == HIGH && (millis() - lastForcedOpenMsgTime > forcedOpenMsgInterval)) {
     relayState = LOW;
     digitalWrite(relayPin, relayState);
-    bot.sendMessage(chat_id, "Pintu telah tertutup otomatis setelah 5 detik", "");
+    bot.sendMessage(chat_id, "Jangan lupa tutup pintu lagi ya!", "");
+    doorClosedByBot = true;
+    messageSent = true;  // Set flag to indicate the message was sent
+  }
+
+  // Check if the door is forced open only if no recent close reminder message has been sent
+  if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
+    bot.sendMessage(chat_id, "Pintu dibuka paksa!, diharapkan untuk periksa kondisi pintu sekarang!", "");
+    lastForceOpenMessageTime = millis(); // Reset the timer for the next forced open message
+    doorClosedByBot = false;
+  }
+
+  // Reset the messageSent flag when the door is properly closed
+  if (digitalRead(sensor) == LOW && doorClosedByBot) {
+    messageSent = false; // Reset flag as the door is properly closed
+    doorClosedByBot = false; // Reset the flag
   }
 }
