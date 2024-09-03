@@ -1,20 +1,23 @@
-const int sensor = D3;  // Pin for the magnetic contact switch
+const int relayPin = D2;
+#define sensor D3
 
-int state; // 0 close - 1 open switch
+void setup() {
+  // Inisialisasi serial monitor untuk debugging
+  Serial.begin(9600);
 
-void setup()
-{
-    pinMode(sensor, INPUT_PULLUP);
-    Serial.begin(115200);  // Initialize Serial communication at 115200 baud rate
+  // Set pin D3 sebagai input untuk membaca status sensor
+  pinMode(sensor, INPUT);
 }
 
-void loop()
-{
-    state = digitalRead(sensor);
-    
-    // Print the state of the sensor to the Serial Monitor
-    Serial.print("Sensor State: ");
-    Serial.println(state);
-    
-    delay(200);  // Wait for 200 milliseconds
+void loop() {
+  int sensorValue = digitalRead(sensor);
+  Serial.print("Sensor Value: ");
+  Serial.println(sensorValue);
+
+  if (sensorValue == LOW) {
+    digitalWrite(relayPin, HIGH); // Misalnya, hidupkan relay jika sensor LOW
+  } else {
+    digitalWrite(relayPin, LOW); // Matikan relay jika sensor HIGH
+  }
+  delay(1000);
 }

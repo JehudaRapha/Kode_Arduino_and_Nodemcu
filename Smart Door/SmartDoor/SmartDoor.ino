@@ -8,8 +8,8 @@
 #include <ArduinoJson.h>
 
 // Replace with your network credentials
-const char* ssid = "This Time For Me";
-const char* password = "tantan0303";
+const char* ssid = "CYBORG";
+const char* password = "12341234";
 
 // Initialize Telegram BOT
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"  // your Bot Token (Get from Botfather)
@@ -33,9 +33,9 @@ unsigned long lastForceOpenMessageTime = 0; // Timer for sending forced open mes
 
 const int relayPin = D2;
 bool relayState = LOW;
-const int sensor = D3;  // Pin for the magnetic contact switch
+const int sensor = D5;  // Pin for the magnetic contact switch
 int doorState;
-int lastDoorState = -1;
+int lastDoorState = -1; 
 bool doorOpenedByBot = false;  // Flag to track if the door was opened by the bot
 bool doorClosedByBot = false;
 bool messageSent = false;
