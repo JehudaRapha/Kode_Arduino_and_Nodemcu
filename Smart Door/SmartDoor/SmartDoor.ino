@@ -63,15 +63,15 @@ void handleNewMessages(int numNewMessages) {
 
     if (text == "/start") {
       String welcome = "Welcome, " + from_name + ".\n";
-      welcome += "Gunakan perintah berikut untuk mengontrol pintu.\n\n";
-      welcome += "/buka_pintu untuk membuka pintu \n";
-      welcome += "/tutup_pintu untuk menutup pintu \n";
+      welcome += "Gunakan perintah berikut untuk mengontrol kunci pintu.\n\n";
+      welcome += "/buka_pintu untuk membuka kunci pintu \n";
+      welcome += "/tutup_pintu untuk menutup kunci pintu \n";
       welcome += "/cek_status_pintu untuk cek kondisi pintu \n";
       bot.sendMessage(chat_id, welcome, "");
     }
 
     if (text == "/buka_pintu") {
-      bot.sendMessage(chat_id, "Pintu Telah dibuka!", "");
+      bot.sendMessage(chat_id, "Pintu Telah terbuka!", "");
       relayState = HIGH;
       doorOpenedByBot = true;  // Set flag to true
       digitalWrite(relayPin, relayState);
@@ -79,7 +79,7 @@ void handleNewMessages(int numNewMessages) {
     }
     
     if (text == "/tutup_pintu") {
-      bot.sendMessage(chat_id, "Pintu telah ditutup!", "");
+      bot.sendMessage(chat_id, "Pintu telah terkunci!", "");
       relayState = LOW;
       digitalWrite(relayPin, relayState);
       doorClosedByBot = true;
