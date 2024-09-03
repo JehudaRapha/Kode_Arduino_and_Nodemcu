@@ -20,7 +20,7 @@ const char* password = "12341234";
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 
-int botRequestDelay = 3000;
+int botRequestDelay = 1000;
 unsigned long lastTimeBotRan;
 unsigned long lastForcedOpenMsgTime = 0;
 int forcedOpenMsgInterval = 5000;
@@ -89,7 +89,7 @@ void handleNewMessages(int numNewMessages) {
       } else {
         bot.sendMessage(chat_id, "Pintu sedang tertutup!", "");
         Serial.println("Door status checked: Closed");
-      }
+      } 
     }
   }
 }
