@@ -193,7 +193,6 @@ void loop() {
 
   if (botConnected && !bot.getMe()) {
     Serial.println("Bot lost connection to Telegram.");
-    bot.sendMessage(chat_id, "Bot terputus dari Telegram harap menunggu...", "");
     botConnected = false;
   }
 }
