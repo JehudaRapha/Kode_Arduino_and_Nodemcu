@@ -1,20 +1,20 @@
 #ifdef ESP32
-  #include <WiFi.h>
+#include <WiFi.h>
 #else
-  #include <ESP8266WiFi.h>
+#include <ESP8266WiFi.h>
 #endif
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
 
-const char* ssid = "CYBORG";
-const char* password = "12341234";
+const char* ssid = "Sts";
+const char* password = "12345678";
 
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"
 #define CHAT_ID "7214692262"
 
 #ifdef ESP8266
-  X509List cert(TELEGRAM_CERTIFICATE_ROOT);
+X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 #endif
 
 WiFiClientSecure client;
@@ -22,8 +22,11 @@ UniversalTelegramBot bot(BOTtoken, client);
 
 int botRequestDelay = 1000;
 unsigned long lastTimeBotRan;
+unsigned long lastPingTime = 0;
+int pingInterval = 60000;  // Ping interval in milliseconds (e.g., 60000 ms = 1 minute)
+
 unsigned long lastForcedOpenMsgTime = 0;
-int forcedOpenMsgInterval = 5000;
+int forcedOpenMsgInterval = 1000;
 unsigned long lastForceOpenMessageTime = 0;
 
 const int relayPin = D2;
@@ -37,6 +40,28 @@ bool messageSent = false;
 bool botConnected = false;
 
 String chat_id;
+
+void sendWelcomeMessage() {
+  String welcome = "Bot telah terhubung ke Telegram.\n";
+  welcome += "Gunakan perintah berikut untuk mengontrol kunci pintu:\n\n";
+  welcome += "/buka_pintu untuk membuka kunci pintu\n";
+  welcome += "/tutup_pintu untuk menutup kunci pintu\n";
+  welcome += "/cek_status_pintu untuk cek kondisi pintu\n";
+  welcome += "/ping untuk mengecek koneksi dan latensi\n";
+  bot.sendMessage(CHAT_ID, welcome, "");
+  Serial.println("Sent welcome message");
+}
+
+void sendPing() {
+  unsigned long startTime = millis();
+  if (bot.getMe()) {
+    unsigned long elapsedTime = millis() - startTime;
+    bot.sendMessage(chat_id, "Ping: " + String(elapsedTime) + " ms", "");
+    Serial.println("Ping sent: " + String(elapsedTime) + " ms");
+  } else {
+    Serial.println("Failed to get bot info for ping.");
+  }
+}
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -61,6 +86,7 @@ void handleNewMessages(int numNewMessages) {
       welcome += "/buka_pintu untuk membuka kunci pintu \n";
       welcome += "/tutup_pintu untuk menutup kunci pintu \n";
       welcome += "/cek_status_pintu untuk cek kondisi pintu \n";
+      welcome += "/ping untuk mengecek koneksi dan latensi \n";
       bot.sendMessage(chat_id, welcome, "");
       Serial.println("Sent welcome message to " + from_name);
     }
@@ -89,7 +115,12 @@ void handleNewMessages(int numNewMessages) {
       } else {
         bot.sendMessage(chat_id, "Pintu sedang tertutup!", "");
         Serial.println("Door status checked: Closed");
-      } 
+      }
+    }
+
+    if (text == "/ping") {
+      sendPing();
+      Serial.println("Ping command executed.");
     }
   }
 }
@@ -99,8 +130,6 @@ void magnetic_door() {
   if (doorState != lastDoorState) {
     if (doorState == LOW) {
       bot.sendMessage(chat_id, "Terimakasih telah menutup pintu kembali!", "");
-      doorOpenedByBot = false;
-      doorClosedByBot = true;
       Serial.println("Door closed manually.");
     }
     lastDoorState = doorState;
@@ -111,10 +140,10 @@ void setup() {
   delay(3000);
   Serial.begin(115200);
 
-  #ifdef ESP8266
-    configTime(0, 0, "pool.ntp.org");
-    client.setTrustAnchors(&cert);
-  #endif
+#ifdef ESP8266
+  configTime(0, 0, "pool.ntp.org");
+  client.setTrustAnchors(&cert);
+#endif
 
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, relayState);
@@ -122,9 +151,9 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  #ifdef ESP32
-    client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
-  #endif
+#ifdef ESP32
+  client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
+#endif
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi..");
@@ -136,6 +165,7 @@ void setup() {
   if (bot.getMe()) {
     Serial.println("Bot is connected to Telegram successfully!");
     botConnected = true;
+    sendWelcomeMessage();  // Mengirim pesan selamat datang saat pertama kali terhubung
   } else {
     Serial.println("Failed to connect to Telegram.");
     botConnected = false;
@@ -164,13 +194,24 @@ void loop() {
     lastTimeBotRan = millis();
   }
 
-  if (relayState == HIGH && digitalRead(sensor) == HIGH && (millis() - lastForcedOpenMsgTime > forcedOpenMsgInterval)) {
+  // Send ping message at a regular interval
+  if (millis() - lastPingTime > pingInterval) {
+    lastPingTime = millis();
+    // Menghapus pemanggilan sendPing() di sini
+  }
+
+  if (relayState == HIGH && digitalRead(sensor) == HIGH) {
+    delay(500);  // wait for 500 ms before closing the door
     relayState = LOW;
     digitalWrite(relayPin, relayState);
     bot.sendMessage(chat_id, "Jangan lupa tutup pintu lagi ya!", "");
     Serial.println("Door automatically closed after forced open.");
     doorClosedByBot = true;
     messageSent = true;
+  }
+
+  if (digitalRead(sensor) == LOW) {
+    magnetic_door();
   }
 
   if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
@@ -180,19 +221,16 @@ void loop() {
     doorClosedByBot = false;
   }
 
-  if (digitalRead(sensor) == LOW && doorClosedByBot) {
-    messageSent = false;
-    doorClosedByBot = false;
-  }
-
   if (!botConnected && bot.getMe()) {
     Serial.println("Bot is reconnected to Telegram successfully!");
-    bot.sendMessage(chat_id, "Bot sudah terhubung kembali ke Telegram.", "");
     botConnected = true;
+    // bot.sendMessage(chat_id, "Bot sudah terhubung kembali ke Telegram.", "");
+    // sendWelcomeMessage();  // Mengirim pesan selamat datang saat bot terhubung kembali
   }
 
   if (botConnected && !bot.getMe()) {
     Serial.println("Bot lost connection to Telegram.");
+    // bot.sendMessage(chat_id, "Koneksi sedang terputus harap menunggu...", "");
     botConnected = false;
   }
 }
