@@ -25,10 +25,6 @@ unsigned long lastTimeBotRan;
 unsigned long lastPingTime = 0;
 int pingInterval = 60000;  // Ping interval in milliseconds (e.g., 60000 ms = 1 minute)
 
-unsigned long lastForcedOpenMsgTime = 0;
-int forcedOpenMsgInterval = 1000;
-unsigned long lastForceOpenMessageTime = 0;
-
 const int relayPin = D2;
 bool relayState = LOW;
 const int sensor = D5;
@@ -36,8 +32,9 @@ int doorState;
 int lastDoorState = -1;
 bool doorOpenedByBot = false;
 bool doorClosedByBot = false;
-bool messageSent = false;
-bool botConnected = false;
+bool forcedOpenMessageSent = false;
+unsigned long lastForcedOpenDetectionTime = 0;
+const unsigned long forcedOpenDetectionDelay = 1000; // 1 second delay
 
 String chat_id;
 
@@ -96,7 +93,6 @@ void handleNewMessages(int numNewMessages) {
       relayState = HIGH;
       doorOpenedByBot = true;
       digitalWrite(relayPin, relayState);
-      lastForcedOpenMsgTime = millis();
       Serial.println("Door opened by bot.");
     }
 
@@ -125,25 +121,14 @@ void handleNewMessages(int numNewMessages) {
   }
 }
 
-void magnetic_door() {
-  doorState = digitalRead(sensor);
-  if (doorState != lastDoorState) {
-    if (doorState == LOW) {
-      bot.sendMessage(chat_id, "Terimakasih telah menutup pintu kembali!", "");
-      Serial.println("Door closed manually.");
-    }
-    lastDoorState = doorState;
-  }
-}
-
 void setup() {
-  delay(3000);
   Serial.begin(115200);
+  delay(3000);
 
-#ifdef ESP8266
-  configTime(0, 0, "pool.ntp.org");
-  client.setTrustAnchors(&cert);
-#endif
+  #ifdef ESP8266
+    configTime(0, 0, "pool.ntp.org");
+    client.setTrustAnchors(&cert);
+  #endif
 
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, relayState);
@@ -151,9 +136,9 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-#ifdef ESP32
-  client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
-#endif
+  #ifdef ESP32
+    client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
+  #endif
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi..");
@@ -164,11 +149,9 @@ void setup() {
   Serial.println("Testing Telegram Bot Connection...");
   if (bot.getMe()) {
     Serial.println("Bot is connected to Telegram successfully!");
-    botConnected = true;
-    sendWelcomeMessage();  // Mengirim pesan selamat datang saat pertama kali terhubung
+    sendWelcomeMessage();
   } else {
     Serial.println("Failed to connect to Telegram.");
-    botConnected = false;
   }
 }
 
@@ -183,11 +166,40 @@ void loop() {
     Serial.println("Reconnected to WiFi");
   }
 
-  magnetic_door();
+  doorState = digitalRead(sensor);
+  
+  // Check for forced door opening
+  if (doorState == HIGH && relayState == LOW && !doorOpenedByBot) {
+    if (!forcedOpenMessageSent && (millis() - lastForcedOpenDetectionTime > forcedOpenDetectionDelay)) {
+      bot.sendMessage(CHAT_ID, "Pintu dibuka paksa! Harap periksa kondisi pintu sekarang!", "");
+      Serial.println("Forced door open detected.");
+      forcedOpenMessageSent = true;
+      lastForcedOpenDetectionTime = millis();
+    }
+  } else if (doorState == LOW) {
+    forcedOpenMessageSent = false;
+    doorOpenedByBot = false;
+  }
 
+  // Handle door closing after bot-initiated opening
+  if (relayState == HIGH && doorState == HIGH) {
+    delay(500);  // wait for 500 ms before closing the door
+    relayState = LOW;
+    digitalWrite(relayPin, relayState);
+    bot.sendMessage(CHAT_ID, "Jangan lupa tutup pintu lagi ya!", "");
+    Serial.println("Door automatically closed after bot-initiated open.");
+    doorClosedByBot = true;
+  }
+
+  // Reset doorOpenedByBot flag when door is closed
+  if (doorState == LOW) {
+    doorOpenedByBot = false;
+    doorClosedByBot = false;
+  }
+
+  // Check for new Telegram messages
   if (millis() > lastTimeBotRan + botRequestDelay) {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-
     if (numNewMessages > 0) {
       handleNewMessages(numNewMessages);
     }
@@ -196,41 +208,15 @@ void loop() {
 
   // Send ping message at a regular interval
   if (millis() - lastPingTime > pingInterval) {
-    lastPingTime = millis();
-    // Menghapus pemanggilan sendPing() di sini
+    lastPingTime = millis(); 
+    // Ping functionality removed as per previous code
   }
 
-  if (relayState == HIGH && digitalRead(sensor) == HIGH) {
-    delay(500);  // wait for 500 ms before closing the door
-    relayState = LOW;
-    digitalWrite(relayPin, relayState);
-    bot.sendMessage(chat_id, "Jangan lupa tutup pintu lagi ya!", "");
-    Serial.println("Door automatically closed after forced open.");
-    doorClosedByBot = true;
-    messageSent = true;
-  }
-
-  if (digitalRead(sensor) == LOW) {
-    magnetic_door();
-  }
-
-  if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
-    bot.sendMessage(chat_id, "Pintu dibuka paksa!, diharapkan untuk periksa kondisi pintu sekarang!", "");
-    lastForceOpenMessageTime = millis();
-    Serial.println("Forced door open detected.");
-    doorClosedByBot = false;
-  }
-
-  if (!botConnected && bot.getMe()) {
-    Serial.println("Bot is reconnected to Telegram successfully!");
-    botConnected = true;
-    // bot.sendMessage(chat_id, "Bot sudah terhubung kembali ke Telegram.", "");
-    // sendWelcomeMessage();  // Mengirim pesan selamat datang saat bot terhubung kembali
-  }
-
-  if (botConnected && !bot.getMe()) {
-    Serial.println("Bot lost connection to Telegram.");
-    // bot.sendMessage(chat_id, "Koneksi sedang terputus harap menunggu...", "");
-    botConnected = false;
+  if (doorState != lastDoorState) {
+    if (doorState == LOW) {
+      bot.sendMessage(CHAT_ID, "Terimakasih telah menutup pintu kembali!", "");
+      Serial.println("Door closed manually.");
+    }
+    lastDoorState = doorState;
   }
 }
