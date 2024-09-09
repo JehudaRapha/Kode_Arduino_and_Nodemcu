@@ -14,8 +14,15 @@ const char* password = "12345678";
 // Initialize Telegram BOT
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"  // your Bot Token (Get from Botfather)
 
-// Use @myidbot to find out the chat ID of an individual or a group
-#define CHAT_ID "7214692262"
+// Array of authorized chat IDs
+const String CHAT_IDS[] = {
+  "7214692262",  // Jehuda
+  "1516484328",  // ko Marhadi
+  "727857551",   // ko Johan
+  "266029748",   // ko Cendy
+  "884465995",   // ko Bagas
+};
+const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
 #ifdef ESP8266
   X509List cert(TELEGRAM_CERTIFICATE_ROOT);
@@ -42,6 +49,31 @@ bool messageSent = false;
 
 String chat_id;
 
+// Function to check if a chat ID is authorized
+bool isAuthorized(String chat_id) {
+  for (int i = 0; i < NUM_CHAT_IDS; i++) {
+    if (chat_id == CHAT_IDS[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Untuk mengirimkan pesan welcome pada saat terkoneksi
+void sendWelcomeMessage() {
+  String welcome = "Bot telah terhubung ke Telegram.\n";
+  welcome += "Gunakan perintah berikut untuk mengontrol kunci pintu:\n\n";
+  welcome += "/buka_pintu untuk membuka kunci pintu\n";
+  welcome += "/tutup_pintu untuk menutup kunci pintu\n";
+  welcome += "/cek_status_pintu untuk cek kondisi pintu\n";
+  welcome += "/ping untuk mengecek koneksi dan latensi\n";
+  
+  for (int i = 0; i < NUM_CHAT_IDS; i++) {
+    bot.sendMessage(CHAT_IDS[i], welcome, "");
+  }
+  Serial.println("Sent welcome message to all authorized users");
+}
+
 // Handle what happens when you receive new messages
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -50,7 +82,7 @@ void handleNewMessages(int numNewMessages) {
   for (int i = 0; i < numNewMessages; i++) {
     // Chat id of the requester
     chat_id = String(bot.messages[i].chat_id);
-    if (chat_id != CHAT_ID) {
+    if (!isAuthorized(chat_id)) {
       bot.sendMessage(chat_id, "Unauthorized user", "");
       continue;
     }
@@ -92,6 +124,12 @@ void handleNewMessages(int numNewMessages) {
         bot.sendMessage(chat_id, "Pintu sedang tertutup!", "");
       }
     }
+  }
+}
+
+void notifyAllUsers(String message) {
+  for (int i = 0; i < NUM_CHAT_IDS; i++) {
+    bot.sendMessage(CHAT_IDS[i], message, "");
   }
 }
 
