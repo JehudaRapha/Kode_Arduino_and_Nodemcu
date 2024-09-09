@@ -7,8 +7,8 @@
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
 
-const char* ssid = "TOMMY GAS";
-const char* password = "SHENG_TAN";
+const char* ssid = "Sts";
+const char* password = "12345678";
 
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"
 #define CHAT_ID "7214692262"
@@ -35,6 +35,7 @@ bool doorClosedByBot = false;
 bool forcedOpenMessageSent = false;
 unsigned long lastForcedOpenDetectionTime = 0;
 const unsigned long forcedOpenDetectionDelay = 1000; // 1 second delay
+bool isFirstRun = true;
 
 String chat_id;
 
@@ -213,10 +214,11 @@ void loop() {
   }
 
   if (doorState != lastDoorState) {
-    if (doorState == LOW) {
+    if (doorState == LOW && !isFirstRun) {
       bot.sendMessage(CHAT_ID, "Terimakasih telah menutup pintu kembali!", "");
       Serial.println("Door closed manually.");
     }
     lastDoorState = doorState;
+    isFirstRun = false;
   }
 }
