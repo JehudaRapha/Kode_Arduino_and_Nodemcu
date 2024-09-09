@@ -7,8 +7,8 @@
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
 
-const char* ssid = "Sts";
-const char* password = "12345678";
+const char* ssid = "TOMMY GAS";
+const char* password = "SHENG_TAN";
 
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"
 #define CHAT_ID "7214692262"
