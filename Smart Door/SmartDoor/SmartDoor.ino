@@ -17,10 +17,10 @@ const char* password = "12345678";
 // Array of authorized chat IDs
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda
-  "1516484328",  // ko Marhadi
-  "727857551",   // ko Johan
-  "266029748",   // ko Cendy
-  "884465995",   // ko Bagas
+  // "1516484328",  // ko Marhadi
+  // "727857551",   // ko Johan
+  // "266029748",   // ko Cendy
+  // "884465995",   // ko Bagas
 };
 const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
@@ -66,7 +66,6 @@ void sendWelcomeMessage() {
   welcome += "/buka_pintu untuk membuka kunci pintu\n";
   welcome += "/tutup_pintu untuk menutup kunci pintu\n";
   welcome += "/cek_status_pintu untuk cek kondisi pintu\n";
-  welcome += "/ping untuk mengecek koneksi dan latensi\n";
   
   for (int i = 0; i < NUM_CHAT_IDS; i++) {
     bot.sendMessage(CHAT_IDS[i], welcome, "");
@@ -103,7 +102,7 @@ void handleNewMessages(int numNewMessages) {
     }
 
     if (text == "/buka_pintu") {
-      bot.sendMessage(chat_id, "Pintu Telah terbuka!", "");
+      bot.sendMessage(chat_id, "Kunci pintu Telah terbuka!", "");
       relayState = HIGH;
       doorOpenedByBot = true;  // Set flag to true
       digitalWrite(relayPin, relayState);
@@ -111,7 +110,7 @@ void handleNewMessages(int numNewMessages) {
     }
     
     if (text == "/tutup_pintu") {
-      bot.sendMessage(chat_id, "Pintu telah terkunci!", "");
+      bot.sendMessage(chat_id, "Kunci pintu telah terkunci!", "");
       relayState = LOW;
       digitalWrite(relayPin, relayState);
       doorClosedByBot = true;
@@ -176,8 +175,10 @@ void setup() {
   Serial.println("Testing Telegram Bot Connection...");
   if (bot.getMe()) {
     Serial.println("Bot is connected to Telegram successfully!");
+    sendWelcomeMessage();
   } else {
     Serial.println("Failed to connect to Telegram.");
+    sendWelcomeMessage();
   }
 }
 
