@@ -213,9 +213,7 @@ void loop() {
     relayActivatedByButton = false; // Reset status relay tombol
     Serial.println("Relay deactivated after button press"); // Cetak pesan
   }
-
-  magnetic_door(); // Panggil fungsi untuk menangani status pintu
-
+  
   if (millis() > lastTimeBotRan + botRequestDelay) { // Cek interval polling bot
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1); // Ambil pesan baru
 
