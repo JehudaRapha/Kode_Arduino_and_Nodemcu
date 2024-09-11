@@ -1,7 +1,7 @@
 #ifdef ESP32
-  #include <WiFi.h>
+#include <WiFi.h>
 #else
-  #include <ESP8266WiFi.h>
+#include <ESP8266WiFi.h>
 #endif
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
@@ -21,7 +21,7 @@ const String CHAT_IDS[] = {
 const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
 #ifdef ESP8266
-  X509List cert(TELEGRAM_CERTIFICATE_ROOT);
+X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 #endif
 
 WiFiClientSecure client;
@@ -39,15 +39,16 @@ const int sensor = D5;
 
 bool relayState = LOW;
 int doorState;
-int lastDoorState = -1; 
+int lastDoorState = -1;
 bool doorOpenedByBot = false;
 bool doorClosedByBot = false;
 bool messageSent = false;
 
 // New variables for button control
 unsigned long buttonPressTime = 0;
-const unsigned long relayActivationTime = 10000;  // 10 seconds
+const unsigned long relayActivationTime = 15000;  // 10 seconds
 bool relayActivatedByButton = false;
+bool doorOpenedByButton = false;
 
 String chat_id;
 
@@ -66,7 +67,7 @@ void sendWelcomeMessage() {
   welcome += "/buka_pintu untuk membuka kunci pintu\n";
   welcome += "/tutup_pintu untuk menutup kunci pintu\n";
   welcome += "/cek_status_pintu untuk cek kondisi pintu\n";
-  
+
   for (int i = 0; i < NUM_CHAT_IDS; i++) {
     bot.sendMessage(CHAT_IDS[i], welcome, "");
   }
@@ -83,7 +84,7 @@ void handleNewMessages(int numNewMessages) {
       bot.sendMessage(chat_id, "Unauthorized user", "");
       continue;
     }
-    
+
     String text = bot.messages[i].text;
     Serial.println(text);
 
@@ -105,14 +106,14 @@ void handleNewMessages(int numNewMessages) {
       digitalWrite(relayPin, relayState);
       lastForcedOpenMsgTime = millis();
     }
-    
+
     if (text == "/tutup_pintu") {
       bot.sendMessage(chat_id, "Kunci pintu telah terkunci!", "");
       relayState = LOW;
       digitalWrite(relayPin, relayState);
       doorClosedByBot = true;
     }
-    
+
     if (text == "/cek_status_pintu") {
       if (digitalRead(sensor) == HIGH) {
         bot.sendMessage(chat_id, "Pintu sedang terbuka!", "");
@@ -144,28 +145,28 @@ void magnetic_door() {
 void setup() {
   Serial.begin(115200);
 
-  #ifdef ESP8266
-    configTime(0, 0, "pool.ntp.org");
-    client.setTrustAnchors(&cert);
-  #endif
+#ifdef ESP8266
+  configTime(0, 0, "pool.ntp.org");
+  client.setTrustAnchors(&cert);
+#endif
 
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, relayState);
   pinMode(sensor, INPUT_PULLUP);
   pinMode(buttonPin, INPUT_PULLUP);  // Set button pin as input with pull-up
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  #ifdef ESP32
-    client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
-  #endif
+#ifdef ESP32
+  client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
+#endif
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi..");
   }
   Serial.println("Connected to WiFi");
   Serial.println("IP Address: " + WiFi.localIP().toString());
-  
+
   if (bot.getMe()) {
     Serial.println("Bot is connected to Telegram successfully!");
     sendWelcomeMessage();
@@ -221,15 +222,24 @@ void loop() {
     messageSent = true;
   }
 
-  // Check if the door is forced open only if no recent close reminder message has been sent
-  if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
+  // New logic: if sensor is HIGH, deactivate relay if activated by button
+  if (digitalRead(sensor) == HIGH && relayActivatedByButton) {
+    digitalWrite(relayPin, LOW);
+    relayActivatedByButton = false;
+    doorOpenedByButton = true;  // Indicate that the door was opened by the button
+    Serial.println("Sensor HIGH, relay deactivated");
+  }
+
+  // Avoid sending forced open message if the door was opened by the button
+  if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && !doorOpenedByButton && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
     bot.sendMessage(chat_id, "Pintu dibuka paksa!, diharapkan untuk periksa kondisi pintu sekarang!", "");
     lastForceOpenMessageTime = millis();
     doorClosedByBot = false;
   }
 
-  // Reset the messageSent flag when the door is properly closed
-  if (digitalRead(sensor) == LOW && doorClosedByBot) {
+  // Reset the flag when the door is properly closed
+  if (digitalRead(sensor) == LOW) {
+    doorOpenedByButton = false;  // Reset the flag when door is closed
     messageSent = false;
     doorClosedByBot = false;
   }
