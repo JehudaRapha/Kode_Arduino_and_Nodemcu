@@ -70,11 +70,8 @@ bool isAuthorized(String chat_id) {
 // Fungsi untuk mengirim pesan sambutan ke pengguna
 void sendWelcomeMessage() {
   String welcome = "Bot telah terhubung ke Telegram.\n";
-  welcome += "Gunakan perintah berikut untuk mengontrol kunci pintu:\n\n";
-  welcome += "/buka_pintu untuk membuka kunci pintu\n";
-  welcome += "/tutup_pintu untuk menutup kunci pintu\n";
-  welcome += "/cek_status_pintu untuk cek kondisi pintu\n";
-
+  welcome += "/start untuk memulai bot\n";
+  
   for (int i = 0; i < NUM_CHAT_IDS; i++) {
     bot.sendMessage(CHAT_IDS[i], welcome, ""); // Kirim pesan ke semua pengguna yang diotorisasi
   }
