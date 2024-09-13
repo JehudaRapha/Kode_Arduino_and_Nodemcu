@@ -213,7 +213,7 @@ void loop() {
     relayActivatedByButton = false; // Reset status relay tombol
     Serial.println("Relay deactivated after button press"); // Cetak pesan
   }
-  
+
   if (millis() > lastTimeBotRan + botRequestDelay) { // Cek interval polling bot
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1); // Ambil pesan baru
 
@@ -239,6 +239,8 @@ void loop() {
     doorOpenedByButton = true;  // Tandai pintu dibuka oleh tombol
     Serial.println("Sensor HIGH, relay deactivated"); // Cetak pesan
   }
+
+  magnetic_door();
 
   // Ketika ada yang membuka pintu secara button maupun bot, maka akan mengirimkan pesan darurat
   if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && !doorOpenedByButton && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
