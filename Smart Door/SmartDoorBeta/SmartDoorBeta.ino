@@ -17,6 +17,7 @@ const char* password = "12345678";
 // Array untuk ID chat yang diotorisasi
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda
+  "1166902768",  // ka Wida
   // "1516484328",  // ko Marhadi
   // "727857551",   // ko Johan
   // "266029748",   // ko Cendy
@@ -100,12 +101,13 @@ void handleNewMessages(int numNewMessages) {
       welcome += "Gunakan perintah berikut untuk mengontrol kunci pintu.\n\n";
       welcome += "/buka_pintu untuk membuka kunci pintu \n";
       welcome += "/tutup_pintu untuk menutup kunci pintu \n";
-      welcome += "/cek_status_pintu untuk cek kondisi pintu \n";
+      welcome += "/status_pintu untuk cek kondisi pintu \n";
+      welcome += "/status_kunci untuk cek status kunci pintu \n"; // Tambahkan perintah baru
       bot.sendMessage(chat_id, welcome, ""); // Kirim pesan sambutan
     }
 
     if (text == "/buka_pintu") { // Jika perintah membuka pintu diterima
-      bot.sendMessage(chat_id, "Kunci pintu Telah terbuka!", "");
+      bot.sendMessage(chat_id, "Kunci pintu telah terbuka", "");
       relayState = HIGH; // Aktifkan relay
       doorOpenedByBot = true; // Tandai pintu dibuka oleh bot
       digitalWrite(relayPin, relayState); // Nyalakan relay
@@ -113,17 +115,26 @@ void handleNewMessages(int numNewMessages) {
     }
 
     if (text == "/tutup_pintu") { // Jika perintah menutup pintu diterima
-      bot.sendMessage(chat_id, "Kunci pintu telah terkunci!", "");
+      bot.sendMessage(chat_id, "Kunci pintu telah terkunci", "");
       relayState = LOW; // Matikan relay
       digitalWrite(relayPin, relayState); // Matikan relay
       doorClosedByBot = true; // Tandai pintu ditutup oleh bot
     }
 
-    if (text == "/cek_status_pintu") { // Jika perintah cek status pintu diterima
+    if (text == "/status_pintu") { // Jika perintah cek status pintu diterima
       if (digitalRead(sensor) == HIGH) {
-        bot.sendMessage(chat_id, "Pintu sedang terbuka!", ""); // Kirim status pintu terbuka
+        bot.sendMessage(chat_id, "Pintu sedang terbuka", ""); // Kirim status pintu terbuka
       } else {
-        bot.sendMessage(chat_id, "Pintu sedang tertutup!", ""); // Kirim status pintu tertutup
+        bot.sendMessage(chat_id, "Pintu sedang tertutup", ""); // Kirim status pintu tertutup
+      }
+    }
+
+    // Perintah baru untuk mengecek status kunci pintu (relay)
+    if (text == "/status_kunci") {
+      if (relayState == HIGH) {
+        bot.sendMessage(chat_id, "Kunci pintu sedang terbuka", "");
+      } else {
+        bot.sendMessage(chat_id, "Kunci pintu sedang terkunci", "");
       }
     }
   }
@@ -201,12 +212,14 @@ void loop() {
     relayActivatedByButton = true; // Tandai relay diaktifkan oleh tombol
     buttonPressTime = millis(); // Simpan waktu tombol ditekan
     digitalWrite(relayPin, HIGH); // Nyalakan relay
+    relayState = HIGH; // Update status relay
     Serial.println("Button pressed, relay activated"); // Cetak pesan
   }
 
   // Cek apakah waktu relay aktif sudah habis setelah tombol ditekan
   if (relayActivatedByButton && millis() - buttonPressTime >= relayActivationTime) {
     digitalWrite(relayPin, LOW); // Matikan relay
+    relayState = LOW; // Update status relay
     relayActivatedByButton = false; // Reset status relay tombol
     Serial.println("Relay deactivated after button press"); // Cetak pesan
   }
@@ -232,6 +245,7 @@ void loop() {
   // Logika baru: jika sensor terbuka, matikan relay jika diaktifkan oleh tombol
   if (digitalRead(sensor) == HIGH && relayActivatedByButton) {
     digitalWrite(relayPin, LOW); // Matikan relay
+    relayState = LOW; // Update status relay
     relayActivatedByButton = false; // Reset status relay tombol
     doorOpenedByButton = true;  // Tandai pintu dibuka oleh tombol
     Serial.println("Sensor HIGH, relay deactivated"); // Cetak pesan
@@ -241,8 +255,9 @@ void loop() {
 
   // Ketika ada yang membuka pintu secara button maupun bot, maka akan mengirimkan pesan darurat
   if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && !doorOpenedByButton && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
-    bot.sendMessage(chat_id, "Pintu dibuka paksa!, diharapkan untuk periksa kondisi pintu sekarang!", ""); // Kirim pesan pintu paksa
+    notifyAllUsers("Pintu dibuka paksa!, diharapkan untuk periksa kondisi pintu sekarang!"); // Kirim pesan ke semua pengguna yang diotorisasi
     lastForceOpenMessageTime = millis(); // Update waktu pesan terakhir
+    messageSent = true;  // Set flag agar pesan tidak terkirim terus-menerus
     doorClosedByBot = false; // Reset status pintu ditutup oleh bot
   }
 
