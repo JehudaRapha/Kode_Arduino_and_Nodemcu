@@ -7,7 +7,7 @@
 
 // Informasi Firebase
 #define FIREBASE_HOST "https://controlrelay-29d5d-default-rtdb.asia-southeast1.firebasedatabase.app"  // Ganti dengan URL Database Firebase kamu
-#define FIREBASE_AUTH "AIzaSyDGC8U0v1U8aN10q7Gf20rKxo319L23KzQ"         // Ganti dengan API Key Firebase kamu
+#define FIREBASE_AUTH "ddEfkRLEHpVMHmlbbahLZDXpukDVZb4PUOHWRibb" // Ganti dengan API Key Firebase kamu
 
 FirebaseData firebaseData;
 FirebaseConfig config;
