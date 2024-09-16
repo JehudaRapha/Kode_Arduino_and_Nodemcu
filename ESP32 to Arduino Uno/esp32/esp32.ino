@@ -1,21 +1,27 @@
 // ESP32
-#include <SoftwareSerial.h>
-SoftwareSerial myserial(15, 2); // RX TX
+#define RXD1 4  // Pin RX (sesuai dengan pin GPIO ESP32)
+#define TXD1 5  // Pin TX (sesuai dengan pin GPIO ESP32)
 
 void setup() {
-  // Memulai komunikasi serial pada baud rate 115200 untuk monitor serial
+  // Menginisialisasi Serial Monitor untuk debugging
   Serial.begin(115200);
-  
-  // Memulai SoftwareSerial pada baud rate 115200 untuk komunikasi dengan Arduino Uno
-  myserial.begin(115200);
-  Serial.println("ESP32 Ready to send data");
+
+  // Menginisialisasi Serial1 (dengan pin RX dan TX yang kita tetapkan) pada baud rate 9600
+  Serial1.begin(9600, SERIAL_8N1, RXD1, TXD1);
 }
 
 void loop() {
-  // Mengirim pesan ke Arduino Uno setiap 2 detik
-  myserial.println("Hello from ESP32!");
-  Serial.println("Sent: Hello from ESP32!");
-  
-  // Tunggu 2 detik sebelum mengirim pesan lagi
-  delay(2000);
+  // Mengirimkan perintah untuk menghidupkan relay ke Arduino
+  Serial1.println("TURN_ON_RELAY");
+  Serial.println("Mengirim TURN_ON_RELAY");
+
+  // Tunggu 5 detik, kemudian kirim perintah untuk mematikan relay
+  delay(5000);
+
+  // Mengirimkan perintah untuk mematikan relay ke Arduino
+  Serial1.println("TURN_OFF_RELAY");
+  Serial.println("Mengirim TURN_OFF_RELAY");
+
+  // Tunggu 5 detik sebelum mengulangi siklus
+  delay(5000);
 }

@@ -1,21 +1,36 @@
-// Arduino Uno
-#include <SoftwareSerial.h>
-SoftwareSerial myserial(4, 3); // RX TX
+// Arduino
+#define RELAY_PIN 3 // Pin untuk relay
 
 void setup() {
-  // Memulai komunikasi serial pada baud rate 9600 untuk monitor serial
+  // Menginisialisasi Serial komunikasi di pin TX (Pin 1) dan RX (Pin 0) pada baud rate 9600
   Serial.begin(9600);
 
-  // Memulai SoftwareSerial pada baud rate 115200 untuk komunikasi dengan ESP32
-  myserial.begin(115200);
-  Serial.println("Arduino Ready to receive data");
+  // Mengatur pin relay sebagai OUTPUT
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // Pastikan relay dalam keadaan mati saat memulai
 }
 
 void loop() {
   // Cek apakah ada data yang masuk dari ESP32
-  if (myserial.available()) {
-    String receivedData = myserial.readStringUntil('\n');
-    Serial.print("Received: ");
-    Serial.println(receivedData);
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    
+    // Debugging: Tampilkan perintah yang diterima
+    Serial.print("Command received: ");
+    Serial.println(command);
+    command.trim();  // Menghapus spasi di awal dan akhir string
+    
+    // Periksa apakah perintah adalah untuk menghidupkan relay
+    if (command == "TURN_ON_RELAY") {
+      digitalWrite(RELAY_PIN, LOW); // Menghidupkan relay
+      Serial.println("Relay turned on");
+    } 
+    // Perintah untuk mematikan relay
+    else if (command == "TURN_OFF_RELAY") {
+      digitalWrite(RELAY_PIN, HIGH); // Mematikan relay
+      Serial.println("Relay turned off");
+    } else {
+      Serial.println("Unknown command");
+    }
   }
 }
