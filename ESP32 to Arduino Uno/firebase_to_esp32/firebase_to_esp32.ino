@@ -6,10 +6,12 @@
 #define WIFI_PASSWORD "SHENG_TAN" // Ganti dengan password WiFi kamu
 
 // Informasi Firebase
-#define FIREBASE_HOST "https://controlrelay-29d5d-default-rtdb.asia-southeast1.firebasedatabase.app/"  // Ganti dengan URL Database Firebase kamu
+#define FIREBASE_HOST "https://controlrelay-29d5d-default-rtdb.asia-southeast1.firebasedatabase.app"  // Ganti dengan URL Database Firebase kamu
 #define FIREBASE_AUTH "AIzaSyDGC8U0v1U8aN10q7Gf20rKxo319L23KzQ"         // Ganti dengan API Key Firebase kamu
 
 FirebaseData firebaseData;
+FirebaseConfig config;
+FirebaseAuth auth;
 
 void setup() {
   // Menginisialisasi Serial Monitor
@@ -25,8 +27,12 @@ void setup() {
   Serial.println();
   Serial.println("Terhubung ke WiFi!");
 
+  // Konfigurasi Firebase
+  config.host = FIREBASE_HOST;
+  config.api_key = FIREBASE_AUTH;
+
   // Menghubungkan ke Firebase
-  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
   // Cek koneksi Firebase
