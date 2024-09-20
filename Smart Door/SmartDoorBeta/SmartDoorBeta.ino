@@ -17,12 +17,12 @@ const char* password = "12345678";
 // Array untuk ID chat yang diotorisasi
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda Done
-  "1166902768",  // ka Wida Done
-  "1516484328",  // ko Marhadi Done
-  "727857551",   // ko Johan
-  "266029748",   // ko Cendy
-  "884465995",   // ko Bagas Done
-  "6322703298",  // ko Tengku Done
+  // "1166902768",  // ka Wida Done
+  // "1516484328",  // ko Marhadi Done
+  // "727857551",   // ko Johan
+  // "266029748",   // ko Cendy
+  // "884465995",   // ko Bagas Done
+  // "6322703298",  // ko Tengku Done
 };
 const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
@@ -33,7 +33,7 @@ X509List cert(TELEGRAM_CERTIFICATE_ROOT); // Sertifikat untuk ESP8266
 WiFiClientSecure client; // Client untuk koneksi WiFi aman
 UniversalTelegramBot bot(BOTtoken, client); // Inisialisasi bot telegram
 
-int botRequestDelay = 3000; // Delay waktu untuk polling bot
+int botRequestDelay = 1000; // Delay waktu untuk polling bot
 unsigned long lastTimeBotRan; // Waktu terakhir bot berjalan
 unsigned long lastForcedOpenMsgTime = 0; // Waktu terakhir pesan pintu paksa
 int forcedOpenMsgInterval = 5000; // Interval untuk pesan pintu paksa
