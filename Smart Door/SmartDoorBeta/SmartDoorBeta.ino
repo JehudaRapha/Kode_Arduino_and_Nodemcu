@@ -18,7 +18,7 @@ const char* password = "12345678";
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda Done
   "1166902768",  // ka Wida Done
-  "1516484328",  // ko Marhadi 
+  "1516484328",  // ko Marhadi Done
   "727857551",   // ko Johan
   "266029748",   // ko Cendy
   "884465995",   // ko Bagas Done
