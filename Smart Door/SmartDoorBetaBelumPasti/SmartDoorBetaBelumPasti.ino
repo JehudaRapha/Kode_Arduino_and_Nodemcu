@@ -21,7 +21,7 @@ const String CHAT_IDS[] = {
   // "1166902768",  // ka Wida Done
   // "1516484328",  // ko Marhadi Done
   // "727857551",   // ko Johan
-  // "266029748",   // ko Cendy
+  // "266029748",   // ko Cendy Done
   // "884465995",   // ko Bagas Done
   // "6322703298",  // ko Tengku Done
 };
