@@ -8,19 +8,19 @@
 #include <ArduinoJson.h>
 #include <TimeLib.h>
 
-// Replace with your network credentials
-const char* ssid = "Sts";
-const char* password = "12345678";
+// Ganti dengan kredensial jaringan Anda
+const char* ssid = "SmartDoor";
+const char* password = "12341234";
 
-// Initialize Telegram BOT
+// Inisialisasi Telegram BOT
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"
 
-// Array of authorized chat IDs
+// Array ID chat yang diotorisasi
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda Done
+  // "727857551",   // ko Johan
   // "1166902768",  // ka Wida Done
   // "1516484328",  // ko Marhadi Done
-  // "727857551",   // ko Johan
   // "266029748",   // ko Cendy Done
   // "884465995",   // ko Bagas Done
   // "6322703298",  // ko Tengku Done
@@ -57,6 +57,10 @@ const unsigned long relayActivationTime = 15000;
 bool relayActivatedByButton = false;
 bool doorOpenedByButton = false;
 
+volatile bool buttonPressed = false;
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
+
 String chat_id;
 
 bool isAuthorized(String chat_id) {
@@ -69,13 +73,14 @@ bool isAuthorized(String chat_id) {
 }
 
 void sendWelcomeMessage() {
-  String welcome = "Bot has been connected to Telegram.\n";
-  welcome += "Use /start to begin\n";
+  String welcome = "Bot telah terhubung ke Telegram.\n";
+  welcome += "Gunakan /start untuk memulai\n";
   
   for (int i = 0; i < NUM_CHAT_IDS; i++) {
     bot.sendMessage(CHAT_IDS[i], welcome, "");
+    Serial.println("ID Chat " + CHAT_IDS[i] + " berhasil tersambung");
   }
-  Serial.println("Sent welcome message to all authorized users");
+  Serial.println("Pesan selamat datang telah dikirim ke semua pengguna yang diotorisasi");
 }
 
 void handleNewMessages(int numNewMessages) {
@@ -85,53 +90,60 @@ void handleNewMessages(int numNewMessages) {
   for (int i = 0; i < numNewMessages; i++) {
     chat_id = String(bot.messages[i].chat_id);
     if (!isAuthorized(chat_id)) {
-      bot.sendMessage(chat_id, "Unauthorized user", "");
+      bot.sendMessage(chat_id, "Pengguna tidak diotorisasi", "");
       continue;
     }
 
     String text = bot.messages[i].text;
-    Serial.println(text);
+    Serial.println("ID Chat: " + chat_id + " memerintahkan: " + text);
 
     String from_name = bot.messages[i].from_name;
 
     if (text == "/start") {
-      String welcome = "Welcome, " + from_name + ".\n";
-      welcome += "Use these commands to control the door lock.\n\n";
-      welcome += "/open_door to unlock the door \n";
-      welcome += "/close_door to lock the door \n";
-      welcome += "/door_status to check the door condition \n";
-      welcome += "/lock_status to check the door lock status \n";
+      String welcome = "Selamat datang, " + from_name + ".\n";
+      welcome += "Gunakan perintah berikut untuk mengontrol kunci pintu.\n\n";
+      welcome += "/buka_pintu untuk membuka kunci pintu \n";
+      welcome += "/kunci_pintu untuk mengunci pintu \n";
+      welcome += "/status_pintu untuk memeriksa kondisi pintu \n";
+      welcome += "/status_kunci untuk memeriksa status kunci pintu \n";
       bot.sendMessage(chat_id, welcome, "");
+      Serial.println("Pesan selamat datang dikirim ke ID Chat: " + chat_id);
     }
 
-    if (text == "/open_door") {
-      bot.sendMessage(chat_id, "Door lock has been opened", "");
+    if (text == "/buka_pintu") {
+      bot.sendMessage(chat_id, "Kunci pintu telah dibuka", "");
       relayState = HIGH;
       doorOpenedByBot = true;
       digitalWrite(relayPin, relayState);
       lastForcedOpenMsgTime = millis();
+      Serial.println("Pintu dibuka oleh ID Chat: " + chat_id);
     }
 
-    if (text == "/close_door") {
-      bot.sendMessage(chat_id, "Door has been locked", "");
+    if (text == "/kunci_pintu") {
+      bot.sendMessage(chat_id, "Pintu telah dikunci", "");
       relayState = LOW;
       digitalWrite(relayPin, relayState);
       doorClosedByBot = true;
+      Serial.println("Pintu dikunci oleh ID Chat: " + chat_id);
     }
 
-    if (text == "/door_status") {
+    if (text == "/status_pintu") {
       if (digitalRead(sensor) == HIGH) {
-        bot.sendMessage(chat_id, "Door is currently open", "");
+        bot.sendMessage(chat_id, "Pintu sedang terbuka", "");
+        Serial.println("Status pintu terbuka dikirim ke ID Chat: " + chat_id);
       } else {
-        bot.sendMessage(chat_id, "Door is currently closed", "");
+        bot.sendMessage(chat_id, "Pintu sedang tertutup", "");
+        Serial.println("Status pintu tertutup dikirim ke ID Chat: " + chat_id);
       }
     }
 
-    if (text == "/lock_status") {
+    if (text == "/status_kunci") {
       if (relayState == HIGH) {
-        bot.sendMessage(chat_id, "Door lock is currently open", "");
+        bot.sendMessage(chat_id, "Kunci pintu sedang terbuka", "");
+        Serial.println("Status kunci terbuka dikirim ke ID Chat: " + chat_id);
       } else {
-        bot.sendMessage(chat_id, "Door is currently locked", "");
+        bot.sendMessage(chat_id, "Pintu sedang terkunci", "");
+        Serial.println("Status kunci tertutup dikirim ke ID Chat: " + chat_id);
       }
     }
   }
@@ -140,14 +152,24 @@ void handleNewMessages(int numNewMessages) {
 void notifyAllUsers(String message) {
   for (int i = 0; i < NUM_CHAT_IDS; i++) {
     bot.sendMessage(CHAT_IDS[i], message, "");
+    Serial.println("Notifikasi dikirim ke ID Chat: " + CHAT_IDS[i]);
   }
 }
 
 String getFormattedTime() {
   time_t now = time(nullptr);
   struct tm* p_tm = localtime(&now);
-  char buffer[32];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", p_tm);
+  char buffer[64];
+  const char* hari[] = {"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"};
+  const char* bulan[] = {"Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"};
+  sprintf(buffer, "%s, %02d %s %04d, Jam: %02d:%02d:%02d", 
+          hari[p_tm->tm_wday], 
+          p_tm->tm_mday, 
+          bulan[p_tm->tm_mon], 
+          1900 + p_tm->tm_year,
+          p_tm->tm_hour,
+          p_tm->tm_min,
+          p_tm->tm_sec);
   return String(buffer);
 }
 
@@ -156,14 +178,25 @@ void magnetic_door() {
   if (doorState != lastDoorState) {
     if (doorState == LOW && (doorOpenedByBot || doorOpenedByButton || forcedOpenDetected)) {
       String timeStr = getFormattedTime();
-      String message = "Thank you for closing the door! Closed at: " + timeStr;
-      notifyAllUsers(message);
+      String message = "Terima kasih telah menutup pintu kembali pada " + timeStr;
+      // Removed notifyAllUsers here
+      for (int i = 0; i < NUM_CHAT_IDS; i++) {
+        bot.sendMessage(CHAT_IDS[i], message, "");
+      }
+      Serial.println("Pintu ditutup pada: " + timeStr);
       doorOpenedByBot = false;
       doorOpenedByButton = false;
       forcedOpenDetected = false;
       doorClosedByBot = true;
     }
     lastDoorState = doorState;
+  }
+}
+
+void IRAM_ATTR buttonInterrupt() {
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    buttonPressed = true;
+    lastDebounceTime = millis();
   }
 }
 
@@ -179,6 +212,7 @@ void setup() {
   digitalWrite(relayPin, relayState);
   pinMode(sensor, INPUT_PULLUP);
   pinMode(buttonPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(buttonPin), buttonInterrupt, FALLING);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -187,16 +221,17 @@ void setup() {
   #endif
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
-    Serial.println("Connecting to WiFi..");
+    Serial.println("Menghubungkan ke WiFi..");
   }
-  Serial.println("Connected to WiFi");
-  Serial.println("IP Address: " + WiFi.localIP().toString());
+  Serial.println("Terhubung ke WiFi");
+  Serial.println("Alamat IP: " + WiFi.localIP().toString());
 
   if (bot.getMe()) {
-    Serial.println("Bot is connected to Telegram successfully!");
+    Serial.println("Bot berhasil terhubung ke Telegram!");
     sendWelcomeMessage();
   } else {
-    Serial.println("Failed to connect to Telegram.");
+    Serial.println("Gagal terhubung ke Telegram.");
+    sendWelcomeMessage();
   }
 
   configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
@@ -204,29 +239,32 @@ void setup() {
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi lost connection. Reconnecting...");
+    Serial.println("WiFi kehilangan koneksi. Menghubungkan kembali...");
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
       delay(1000);
-      Serial.println("Reconnecting to WiFi...");
+      Serial.println("Menghubungkan kembali ke WiFi...");
     }
-    Serial.println("Reconnected to WiFi");
+    Serial.println("Terhubung kembali ke WiFi");
   }
 
-  if (digitalRead(buttonPin) == LOW && !relayActivatedByButton) {
-    relayActivatedByButton = true;
-    buttonPressTime = millis();
-    digitalWrite(relayPin, HIGH);
-    relayState = HIGH;
-    doorOpenedByButton = true;
-    Serial.println("Button pressed, relay activated");
+  if (buttonPressed) {
+    buttonPressed = false;
+    if (!relayActivatedByButton) {
+      relayActivatedByButton = true;
+      buttonPressTime = millis();
+      digitalWrite(relayPin, HIGH);
+      relayState = HIGH;
+      doorOpenedByButton = true;
+      Serial.println("Tombol ditekan, relay diaktifkan");
+    }
   }
 
   if (relayActivatedByButton && millis() - buttonPressTime >= relayActivationTime) {
     digitalWrite(relayPin, LOW);
     relayState = LOW;
     relayActivatedByButton = false;
-    Serial.println("Relay deactivated after button press");
+    Serial.println("Relay dinonaktifkan setelah tombol ditekan");
   }
 
   if (millis() > lastTimeBotRan + botRequestDelay) {
@@ -241,7 +279,10 @@ void loop() {
   if (relayState == HIGH && digitalRead(sensor) == HIGH && (millis() - lastForcedOpenMsgTime > forcedOpenMsgInterval)) {
     relayState = LOW;
     digitalWrite(relayPin, relayState);
-    notifyAllUsers("Don't forget to close the door!");
+    // Removed notifyAllUsers here
+    for (int i = 0; i < NUM_CHAT_IDS; i++) {
+      bot.sendMessage(CHAT_IDS[i], "Jangan lupa untuk menutup pintu!", "");
+    }
     doorClosedByBot = true;
     messageSent = true;
   }
@@ -251,15 +292,16 @@ void loop() {
     relayState = LOW;
     relayActivatedByButton = false;
     doorOpenedByButton = true;
-    Serial.println("Sensor HIGH, relay deactivated");
+    Serial.println("Sensor HIGH, relay dinonaktifkan");
   }
 
   magnetic_door();
 
   if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && !doorOpenedByButton && !doorOpenedByBot && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
     String timeStr = getFormattedTime();
-    String message = "Door opened forcefully at " + timeStr + "! Please check the door condition immediately!";
-    notifyAllUsers(message);
+    String message = "Pintu dibuka paksa pada " + timeStr + "! Harap segera periksa kondisi pintu!";
+    notifyAllUsers(message);  // This is the only place where notifyAllUsers is still used
+    Serial.println("Pintu dibuka paksa pada: " + timeStr);
     lastForceOpenMessageTime = millis();
     messageSent = true;
     doorClosedByBot = false;
