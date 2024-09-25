@@ -9,8 +9,8 @@
 #include <TimeLib.h>
 
 // Ganti dengan kredensial jaringan Anda
-const char* ssid = "SmartDoor";
-const char* password = "12341234";
+const char* ssid = "Sts";
+const char* password = "12345678";
 
 // Inisialisasi Telegram BOT
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"
@@ -18,11 +18,12 @@ const char* password = "12341234";
 // Array ID chat yang diotorisasi
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda Done
-  "727857551",   // ko Johan
-  "1516484328",  // ko Marhadi Done
-  "266029748",   // ko Cendy Done
-  "884465995",   // ko Bagas Done
-  "6322703298",  // ko Tengku Done
+  "1619253814",  // Mami Done
+  // "727857551",   // ko Johan
+  // "1516484328",  // ko Marhadi Done
+  // "266029748",   // ko Cendy Done
+  // "884465995",   // ko Bagas Done
+  // "6322703298",  // ko Tengku Done
 };
 const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
