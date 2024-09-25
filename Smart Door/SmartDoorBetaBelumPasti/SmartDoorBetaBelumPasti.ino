@@ -9,8 +9,8 @@
 #include <TimeLib.h>
 
 // Ganti dengan kredensial jaringan Anda
-const char* ssid = "Sts";
-const char* password = "12345678";
+const char* ssid = "SmartDoor";
+const char* password = "12341234";
 
 // Inisialisasi Telegram BOT
 #define BOTtoken "7345692542:AAFvBg9diwYwYw38rHgwrH0r3JYxhodqwv4"
@@ -19,11 +19,11 @@ const char* password = "12345678";
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda Done
   "1619253814",  // Mami Done
-  // "727857551",   // ko Johan
-  // "1516484328",  // ko Marhadi Done
-  // "266029748",   // ko Cendy Done
-  // "884465995",   // ko Bagas Done
-  // "6322703298",  // ko Tengku Done
+  "727857551",   // ko Johan
+  "1516484328",  // ko Marhadi Done
+  "266029748",   // ko Cendy Done
+  "884465995",   // ko Bagas Done
+  "6322703298",  // ko Tengku Done
 };
 const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
@@ -62,6 +62,7 @@ unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;
 
 String chat_id;
+String lastOpenedByChatId = "";
 
 bool isAuthorized(String chat_id) {
   for (int i = 0; i < NUM_CHAT_IDS; i++) {
@@ -114,6 +115,7 @@ void handleNewMessages(int numNewMessages) {
       bot.sendMessage(chat_id, "Kunci pintu telah dibuka", "");
       relayState = HIGH;
       doorOpenedByBot = true;
+      lastOpenedByChatId = chat_id;
       digitalWrite(relayPin, relayState);
       lastForcedOpenMsgTime = millis();
       Serial.println("Pintu dibuka oleh ID Chat: " + chat_id);
@@ -179,15 +181,20 @@ void magnetic_door() {
     if (doorState == LOW && (doorOpenedByBot || doorOpenedByButton || forcedOpenDetected)) {
       String timeStr = getFormattedTime();
       String message = "Terima kasih telah menutup pintu kembali pada " + timeStr;
-      // Removed notifyAllUsers here
-      for (int i = 0; i < NUM_CHAT_IDS; i++) {
-        bot.sendMessage(CHAT_IDS[i], message, "");
+      if (forcedOpenDetected) {
+        message = "Pintu telah ditutup kembali pada " + timeStr;
+        notifyAllUsers(message);
+        Serial.println("Notifikasi pintu paksa ditutup dikirim ke semua pengguna");
+      } else {
+        bot.sendMessage(lastOpenedByChatId, message, "");
+        Serial.println("Pesan terima kasih dikirim ke ID Chat: " + lastOpenedByChatId);
       }
       Serial.println("Pintu ditutup pada: " + timeStr);
       doorOpenedByBot = false;
       doorOpenedByButton = false;
       forcedOpenDetected = false;
       doorClosedByBot = true;
+      lastOpenedByChatId = "";
     }
     lastDoorState = doorState;
   }
@@ -279,9 +286,9 @@ void loop() {
   if (relayState == HIGH && digitalRead(sensor) == HIGH && (millis() - lastForcedOpenMsgTime > forcedOpenMsgInterval)) {
     relayState = LOW;
     digitalWrite(relayPin, relayState);
-    // Removed notifyAllUsers here
-    for (int i = 0; i < NUM_CHAT_IDS; i++) {
-      bot.sendMessage(CHAT_IDS[i], "Jangan lupa untuk menutup pintu!", "");
+    if (!lastOpenedByChatId.isEmpty()) {
+      bot.sendMessage(lastOpenedByChatId, "Jangan lupa untuk menutup pintu!", "");
+      Serial.println("Peringatan menutup pintu dikirim ke ID Chat: " + lastOpenedByChatId);
     }
     doorClosedByBot = true;
     messageSent = true;
@@ -300,7 +307,7 @@ void loop() {
   if (digitalRead(sensor) == HIGH && relayState == LOW && !messageSent && !doorOpenedByButton && !doorOpenedByBot && (millis() - lastForceOpenMessageTime > forcedOpenMsgInterval)) {
     String timeStr = getFormattedTime();
     String message = "Pintu dibuka paksa pada " + timeStr + "! Harap segera periksa kondisi pintu!";
-    notifyAllUsers(message);  // This is the only place where notifyAllUsers is still used
+    notifyAllUsers(message);
     Serial.println("Pintu dibuka paksa pada: " + timeStr);
     lastForceOpenMessageTime = millis();
     messageSent = true;
