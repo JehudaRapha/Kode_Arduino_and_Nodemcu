@@ -18,12 +18,11 @@ const char* password = "12341234";
 // Array ID chat yang diotorisasi
 const String CHAT_IDS[] = {
   "7214692262",  // Jehuda Done
-  // "727857551",   // ko Johan
-  // "1166902768",  // ka Wida Done
-  // "1516484328",  // ko Marhadi Done
-  // "266029748",   // ko Cendy Done
-  // "884465995",   // ko Bagas Done
-  // "6322703298",  // ko Tengku Done
+  "727857551",   // ko Johan
+  "1516484328",  // ko Marhadi Done
+  "266029748",   // ko Cendy Done
+  "884465995",   // ko Bagas Done
+  "6322703298",  // ko Tengku Done
 };
 const int NUM_CHAT_IDS = sizeof(CHAT_IDS) / sizeof(CHAT_IDS[0]);
 
