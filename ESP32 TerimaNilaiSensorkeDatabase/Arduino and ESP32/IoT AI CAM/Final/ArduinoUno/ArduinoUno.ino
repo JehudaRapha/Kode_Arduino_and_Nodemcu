@@ -203,3 +203,5 @@ void loop() {
 
   delay(20);
 }
+
+//belum menyesuaikan apa yang di python
