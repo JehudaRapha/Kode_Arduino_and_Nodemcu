@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IoT Room Occupancy Dashboard</title>
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/10644/10644640.png">
+    <style>
+      :root {
+        --accent-light: #ff8a50;
+        --accent-main: #e64a19;
+        --accent-dark: #7b241c;
+        --text-light: #fff3e0;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        color: var(--text-light);
+        background: radial-gradient(circle at center, #3a0d00, #1a0500 85%);
+        overflow-x: hidden;
+      }
+
+      /* Background layer */
+      .bg-image {
+        position: fixed;
+        inset: 0;
+        object-fit: cover;
+        z-index: -3;
+        opacity: 0.45;
+        filter: brightness(0.9) contrast(1.1) saturate(1.3);
+      }
+
+      .bg-gradient {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(
+            rgba(80, 25, 5, 0.8),
+            rgba(20, 10, 5, 0.9)
+          ),
+          radial-gradient(
+            circle at 25% 35%,
+            rgba(255, 130, 70, 0.3),
+            transparent 60%
+          ),
+          radial-gradient(
+            circle at 80% 80%,
+            rgba(255, 90, 40, 0.2),
+            transparent 60%
+          );
+        z-index: -2;
+        animation: hueShift 15s ease-in-out infinite alternate;
+      }
+
+      @keyframes hueShift {
+        0% {
+          filter: hue-rotate(0deg);
+        }
+        100% {
+          filter: hue-rotate(30deg);
+        }
+      }
+
+      /* Floating particles */
+      .particles {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        z-index: -1;
+        pointer-events: none;
+      }
+
+      .particle {
+        position: absolute;
+        bottom: -40px;
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-bottom: 18px solid rgba(255, 138, 80, 0.35);
+        opacity: 0.8;
+        animation: floatUp 15s linear infinite;
+        filter: drop-shadow(0 0 10px rgba(255, 138, 80, 0.6));
+      }
+
+      @keyframes floatUp {
+        0% {
+          transform: translateY(0) rotate(0deg);
+          opacity: 0.8;
+        }
+        100% {
+          transform: translateY(-110vh) rotate(360deg);
+          opacity: 0;
+        }
+      }
+
+      /* HEADER */
+      .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 85px;
+        background: rgba(40, 10, 5, 0.85);
+        backdrop-filter: blur(25px);
+        border-bottom: 1px solid rgba(255, 140, 80, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 40px;
+        z-index: 10;
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.6);
+      }
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .logo {
+        width: 55px;
+        height: 55px;
+        background: linear-gradient(
+          135deg,
+          var(--accent-light),
+          var(--accent-dark)
+        );
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: bold;
+        color: white;
+        box-shadow: 0 0 25px rgba(255, 140, 80, 0.6);
+        animation: pulse 2s ease-in-out infinite alternate;
+      }
+
+      @keyframes pulse {
+        from {
+          transform: scale(1);
+          box-shadow: 0 0 20px rgba(255, 140, 80, 0.3);
+        }
+        to {
+          transform: scale(1.08);
+          box-shadow: 0 0 40px rgba(255, 140, 80, 0.8);
+        }
+      }
+
+      .title-section {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.3;
+      }
+
+      .main-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #ffe0b2;
+      }
+
+      .sub-title {
+        font-size: 13px;
+        color: #ffccbc;
+        letter-spacing: 1px;
+      }
+
+      #connectionStatus {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
+      }
+
+      .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #7cfc00;
+        box-shadow: 0 0 10px #7cfc00;
+        transition: background 0.4s, box-shadow 0.4s;
+      }
+
+      .offline {
+        background: #ff6347 !important;
+        box-shadow: 0 0 10px #ff6347;
+      }
+
+      /* MAIN CONTENT */
+      .slogan {
+        position: relative;
+        margin-top: 130px;
+        text-align: center;
+        font-size: 38px;
+        color: rgba(255, 210, 160, 0.15);
+        text-transform: uppercase;
+        font-weight: 800;
+        letter-spacing: 4px;
+        text-shadow: 0 0 25px rgba(255, 140, 60, 0.4);
+        user-select: none;
+        animation: fadeGlow 3s ease-in-out infinite alternate;
+      }
+
+      @keyframes fadeGlow {
+        0% {
+          opacity: 0.5;
+          text-shadow: 0 0 15px rgba(255, 160, 80, 0.2);
+        }
+        100% {
+          opacity: 1;
+          text-shadow: 0 0 35px rgba(255, 140, 80, 0.6);
+        }
+      }
+
+      .main-container {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 40px 20px 80px;
+      }
+
+      .dashboard-layout {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 40px;
+        width: 100%;
+        max-width: 1200px;
+      }
+
+      .card {
+        flex: 1 1 480px;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 140, 60, 0.4),
+          rgba(255, 100, 40, 0.25)
+        );
+        backdrop-filter: blur(20px);
+        padding: 50px 60px;
+        border-radius: 30px;
+        box-shadow: 0 15px 70px rgba(0, 0, 0, 0.8),
+          inset 0 0 60px rgba(255, 160, 80, 0.15);
+        text-align: center;
+        transition: transform 0.5s ease, box-shadow 0.5s ease;
+        animation: floatCard 6s ease-in-out infinite alternate;
+      }
+
+      .card:hover {
+        transform: translateY(-10px) scale(1.03);
+        box-shadow: 0 30px 100px rgba(255, 140, 60, 0.4);
+      }
+
+      @keyframes floatCard {
+        from {
+          transform: translateY(0);
+        }
+        to {
+          transform: translateY(-10px);
+        }
+      }
+
+      .side-card {
+        flex: 0 1 300px;
+        background: rgba(255, 150, 80, 0.1);
+        border: 1px solid rgba(255, 160, 80, 0.35);
+        border-radius: 25px;
+        padding: 40px 30px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+        animation: glowCard 5s infinite alternate ease-in-out;
+      }
+
+      @keyframes glowCard {
+        from {
+          box-shadow: 0 0 30px rgba(255, 150, 80, 0.1);
+        }
+        to {
+          box-shadow: 0 0 60px rgba(255, 180, 120, 0.5);
+        }
+      }
+
+      .title {
+        font-size: 22px;
+        color: #ffccbc;
+        margin-bottom: 20px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+
+      .jumlah {
+        font-size: 90px;
+        font-weight: bold;
+        color: #ffb870;
+        text-shadow: 0 0 20px rgba(255, 180, 90, 0.5);
+        transition: all 0.3s ease;
+      }
+
+      .jumlah.increase {
+        color: #90ee90;
+        text-shadow: 0 0 30px #90ee90, 0 0 60px #32cd32;
+        animation: popUp 0.8s ease;
+      }
+
+      .jumlah.decrease {
+        color: #ff7b7b;
+        text-shadow: 0 0 30px #ff7b7b, 0 0 60px #ff3333;
+        animation: popUp 0.8s ease;
+      }
+
+      @keyframes popUp {
+        0% {
+          transform: scale(1);
+        }
+        30% {
+          transform: scale(1.5);
+        }
+        60% {
+          transform: scale(0.9);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .footer {
+        font-size: 13px;
+        color: #ffccbc;
+        margin-top: 20px;
+      }
+
+      @media (max-width: 900px) {
+        .slogan {
+          font-size: 26px;
+          margin-top: 100px;
+        }
+        .dashboard-layout {
+          flex-direction: column;
+          align-items: center;
+        }
+        .jumlah {
+          font-size: 70px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <img src="download.png" alt="City background" class="bg-image" />
+    <div class="bg-gradient"></div>
+    <div class="particles"></div>
+
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">R</div>
+        <div class="title-section">
+          <div class="main-title">Real-Time IoT Room Occupancy Dashboard</div>
+          <div class="sub-title">Live Monitoring System</div>
+        </div>
+      </div>
+      <div id="connectionStatus">
+        <div class="status-indicator" id="statusDot"></div>
+        <span id="statusText">Live</span>
+      </div>
+    </header>
+
+    <div class="slogan">"Satu Langkah Lebih Maju."</div>
+
+    <div class="main-container">
+      <div class="dashboard-layout">
+        <div class="card">
+          <div class="title">Current Occupancy</div>
+          <div class="jumlah" id="jumlah">0</div>
+          <div class="footer">Developed by a Student of Informatics and Information Systems</div>
+        </div>
+
+        <div class="side-card">
+          <div class="title">Total Today</div>
+          <div class="jumlah" id="totalToday">0</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "http://localhost:8000/api/sensors";
+      const API_URL2 = "http://localhost:8000/api/sensors/today";
+      const jumlahEl = document.getElementById("jumlah");
+      const totalTodayEl = document.getElementById("totalToday");
+      const statusText = document.getElementById("statusText");
+      const statusDot = document.getElementById("statusDot");
+      let lastValue = 0;
+      let isOnline = true;
+      let consecutiveErrors = 0;
+
+      async function fetchJumlah() {
+        try {
+          const res = await fetch(API_URL);
+          const json = await res.json();
+          if (json.summary) {
+            const newValue = json.summary.orang_di_dalam;
+            const oldValue = lastValue;
+            if (newValue !== oldValue) {
+              jumlahEl.textContent = newValue;
+              jumlahEl.classList.remove("increase", "decrease");
+              void jumlahEl.offsetWidth;
+              jumlahEl.classList.add(newValue > oldValue ? "increase" : "decrease");
+              lastValue = newValue;
+            }
+            consecutiveErrors = 0;
+            if (!isOnline) updateConnectionStatus(true);
+          }
+        } catch {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3 && isOnline)
+            updateConnectionStatus(false);
+        }
+      }
+
+      async function fetchJumlahToday() {
+        try {
+          const res = await fetch(API_URL2);
+          const json = await res.json();
+          if (json.total_orang_hari_ini !== undefined) {
+            totalTodayEl.textContent = json.total_orang_hari_ini;
+            consecutiveErrors = 0;
+            if (!isOnline) updateConnectionStatus(true);
+          }
+        } catch {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3 && isOnline)
+            updateConnectionStatus(false);
+        }
+      }
+
+      function updateConnectionStatus(online) {
+        isOnline = online;
+        statusText.textContent = online ? "Live" : "Offline";
+        statusDot.classList.toggle("offline", !online);
+      }
+
+      setInterval(fetchJumlah, 1000);
+      setInterval(fetchJumlahToday, 2000);
+
+      // Floating particles
+      const container = document.querySelector(".particles");
+      const COUNT = 18;
+      for (let i = 0; i < COUNT; i++) {
+        const p = document.createElement("div");
+        p.className = "particle";
+        p.style.left = `${Math.random() * 100}vw`;
+        p.style.animationDelay = `${Math.random() * 8}s`;
+        p.style.animationDuration = `${10 + Math.random() * 10}s`;
+        p.style.transform = `scale(${0.5 + Math.random() * 1.2}) rotate(${Math.random() * 360}deg)`;
+        container.appendChild(p);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,205 @@
+#include <SoftwareSerial.h>
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// ===== LCD =====
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ===== Pin Komponen =====
+const int buzzerPin = 7;
+const int servoInPin = 9;
+const int servoOutPin = 6;
+const int irInPin = 4;    // Sensor IR masuk
+const int irOutPin = 5;   // Sensor IR keluar
+
+// ===== Servo Object =====
+Servo servoIn;
+Servo servoOut;
+
+// ===== Komunikasi Serial dengan ESP32 =====
+const int txPin = 11; // Arduino TX → ESP32 RX
+const int rxPin = 12; // Arduino RX → ESP32 TX
+SoftwareSerial espSerial(rxPin, txPin);
+
+// ===== Variabel =====
+int peopleCount = 0;
+bool irInTriggered = false;
+bool irOutTriggered = false;
+
+// ===== Buzzer Functions =====
+void makeBeep(int duration) {
+  digitalWrite(buzzerPin, HIGH);
+  delay(duration);
+  digitalWrite(buzzerPin, LOW);
+}
+
+void buzzerSuccess() {
+  makeBeep(100); delay(100);
+  makeBeep(100); delay(100);
+  makeBeep(100);
+}
+
+void buzzerFail() {
+  makeBeep(500);
+}
+
+void buzzerRegister() {
+  makeBeep(150); delay(100);
+  makeBeep(150); delay(100);
+  makeBeep(150); delay(100);
+  makeBeep(150);
+}
+
+void buzzerReady() {
+  makeBeep(150); delay(200);
+  makeBeep(150); delay(200);
+  makeBeep(150);
+}
+
+void beepDefault(int times) {
+  for (int i = 0; i < times; i++) {
+    makeBeep(150);
+    delay(200);
+  }
+}
+
+// ===== LCD UTILITY =====
+void lcdShow(String line1, String line2 = "") {
+  lcd.clear();
+  lcd.setCursor(0, 0); lcd.print(line1);
+  lcd.setCursor(0, 1); lcd.print(line2);
+  Serial.print("[LCD] "); Serial.print(line1); Serial.print(" | "); Serial.println(line2);
+}
+
+// ===== Setup =====
+void setup() {
+  Serial.begin(9600);
+  espSerial.begin(9600);
+
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(irInPin, INPUT);
+  pinMode(irOutPin, INPUT);
+
+  servoIn.attach(servoInPin);
+  servoOut.attach(servoOutPin);
+
+  lcd.init();
+  lcd.backlight();
+
+  servoIn.write(180);
+  servoOut.write(180);
+
+  beepDefault(2);
+  lcdShow("System Ready", "Waiting ESP...");
+  espSerial.println("ARDUINO_READY");
+}
+
+// ===== Loop =====
+void loop() {
+  // ============================
+  //     CEK SENSOR IR MASUK/KELUAR
+  // ============================
+  bool irInState = digitalRead(irInPin) == LOW;   // IR active LOW
+  bool irOutState = digitalRead(irOutPin) == LOW;
+
+  // --- Sensor Masuk ---
+  if (irInState && !irInTriggered) {
+    irInTriggered = true;
+    Serial.println("[IR] Detected Masuk");
+
+    espSerial.println("REQ_MASUK");  // Minta ESP32 proses masuk
+  } else if (!irInState && irInTriggered) {
+    irInTriggered = false;
+  }
+
+  // --- Sensor Keluar ---
+  if (irOutState && !irOutTriggered) {
+    irOutTriggered = true;
+    Serial.println("[IR] Detected Keluar");
+
+    espSerial.println("REQ_KELUAR"); // Minta ESP32 proses keluar
+  } else if (!irOutState && irOutTriggered) {
+    irOutTriggered = false;
+  }
+
+  // ============================
+  //     CEK CMD DARI ESP32
+  // ============================
+  if (espSerial.available()) {
+    String cmd = espSerial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd.length() == 0) return;
+
+    Serial.print("📩 CMD: ");
+    Serial.println(cmd);
+
+    // ========== PEOPLE COUNT UPDATE ==========
+    if (cmd.startsWith("PEOPLE_IN:")) {
+      String countStr = cmd.substring(10);
+      int count = countStr.toInt();
+      if (count >= 0) {
+        peopleCount = count;
+        lcdShow("Update Count", "In Room: " + String(peopleCount));
+      }
+    }
+
+    // ========== ORANG MASUK ==========
+    else if (cmd == "API_OK_MASUK") {
+      peopleCount++;
+      buzzerSuccess();
+      lcdShow("Masuk ✔", "Total: " + String(peopleCount));
+
+      servoIn.write(90);
+      delay(2000);
+      servoIn.write(180);
+    }
+
+    // ========== ORANG KELUAR ==========
+    else if (cmd == "API_OK_KELUAR") {
+      if (peopleCount > 0) peopleCount--;
+      buzzerSuccess();
+      lcdShow("Keluar ✔", "Total: " + String(peopleCount));
+
+      servoOut.write(90);
+      delay(2000);
+      servoOut.write(180);
+    }
+
+    // ========== REGISTER SUKSES ==========
+    else if (cmd == "REGISTER_SUCCESS") {
+      buzzerRegister();
+      lcdShow("Register ✔", "Wajah tersimpan");
+    }
+
+    // ========== API FAIL ==========
+    else if (cmd == "API_FAIL") {
+      buzzerFail();
+      lcdShow("API FAIL ❌", "Coba lagi");
+    }
+
+    // ========== READY ==========
+    else if (cmd == "BUZZER_READY") {
+      buzzerReady();
+      lcdShow("Ready", "Waiting user...");
+    }
+
+    // ========== ARM WINDOW ==========
+    else if (cmd.startsWith("ARM_START:")) {
+      lcdShow("ARM Window", "Sensor armed");
+    } else if (cmd.startsWith("OPEN:")) {
+      int openMs = cmd.substring(5).toInt();
+      lcdShow("ARM Open", "Selama " + String(openMs) + "ms");
+      // bisa tambah servo pintu otomatis jika perlu
+    } else if (cmd == "ARM_TIMEOUT") {
+      lcdShow("ARM Timeout", "Tidak trigger");
+    }
+
+    // ========== UNKNOWN COMMAND ==========
+    else {
+      lcdShow("Unknown Cmd", cmd);
+    }
+  }
+
+  delay(20);
+}
