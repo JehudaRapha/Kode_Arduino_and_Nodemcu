@@ -10,8 +10,6 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 const int buzzerPin = 7;
 const int servoInPin = 9;
 const int servoOutPin = 6;
-const int irInPin = 4;    // Sensor IR masuk
-const int irOutPin = 5;   // Sensor IR keluar
 
 // ===== Servo Object =====
 Servo servoIn;
@@ -24,8 +22,6 @@ SoftwareSerial espSerial(rxPin, txPin);
 
 // ===== Variabel =====
 int peopleCount = 0;
-bool irInTriggered = false;
-bool irOutTriggered = false;
 
 // ===== Buzzer Functions =====
 void makeBeep(int duration) {
@@ -78,9 +74,6 @@ void setup() {
   espSerial.begin(9600);
 
   pinMode(buzzerPin, OUTPUT);
-  pinMode(irInPin, INPUT);
-  pinMode(irOutPin, INPUT);
-
   servoIn.attach(servoInPin);
   servoOut.attach(servoOutPin);
 
@@ -97,35 +90,6 @@ void setup() {
 
 // ===== Loop =====
 void loop() {
-  // ============================
-  //     CEK SENSOR IR MASUK/KELUAR
-  // ============================
-  bool irInState = digitalRead(irInPin) == LOW;   // IR active LOW
-  bool irOutState = digitalRead(irOutPin) == LOW;
-
-  // --- Sensor Masuk ---
-  if (irInState && !irInTriggered) {
-    irInTriggered = true;
-    Serial.println("[IR] Detected Masuk");
-
-    espSerial.println("REQ_MASUK");  // Minta ESP32 proses masuk
-  } else if (!irInState && irInTriggered) {
-    irInTriggered = false;
-  }
-
-  // --- Sensor Keluar ---
-  if (irOutState && !irOutTriggered) {
-    irOutTriggered = true;
-    Serial.println("[IR] Detected Keluar");
-
-    espSerial.println("REQ_KELUAR"); // Minta ESP32 proses keluar
-  } else if (!irOutState && irOutTriggered) {
-    irOutTriggered = false;
-  }
-
-  // ============================
-  //     CEK CMD DARI ESP32
-  // ============================
   if (espSerial.available()) {
     String cmd = espSerial.readStringUntil('\n');
     cmd.trim();
@@ -184,17 +148,6 @@ void loop() {
       lcdShow("Ready", "Waiting user...");
     }
 
-    // ========== ARM WINDOW ==========
-    else if (cmd.startsWith("ARM_START:")) {
-      lcdShow("ARM Window", "Sensor armed");
-    } else if (cmd.startsWith("OPEN:")) {
-      int openMs = cmd.substring(5).toInt();
-      lcdShow("ARM Open", "Selama " + String(openMs) + "ms");
-      // bisa tambah servo pintu otomatis jika perlu
-    } else if (cmd == "ARM_TIMEOUT") {
-      lcdShow("ARM Timeout", "Tidak trigger");
-    }
-
     // ========== UNKNOWN COMMAND ==========
     else {
       lcdShow("Unknown Cmd", cmd);
@@ -203,5 +156,3 @@ void loop() {
 
   delay(20);
 }
-
-//belum menyesuaikan apa yang di python

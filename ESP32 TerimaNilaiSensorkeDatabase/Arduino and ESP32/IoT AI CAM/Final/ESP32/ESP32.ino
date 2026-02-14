@@ -11,9 +11,9 @@
 #define TXD2 26
 
 // === WiFi dan API ===
-const char* ssid = "TOMMY GAS";
-const char* password = "SHENG_TAN";
-const char* apiEndpoint = "http://192.168.0.107:8000/api/sensors";
+const char* ssid = "My IoT";
+const char* password = "12345678";
+const char* apiEndpoint = "http://10.165.23.8:8000/api/sensors";
 
 int peopleCount = 0;
 const int maxPeople = 15;
