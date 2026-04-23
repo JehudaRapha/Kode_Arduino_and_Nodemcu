@@ -1,0 +1,1029 @@
+
+#!/usr/bin/env python3
+# ==========================================================
+# face_system_jarvis_fast_voice_nospeak.py
+# - Mode ketik: bicara (TTS)
+# - Mode voice: TIDAK bicara (TTS dimute) -> fokus dengar & eksekusi
+# - Deteksi wajah cepat (HaarCascade + CLAHE) + encoding face_recognition
+# - Voice: prioritaskan suara terkuat (RMS gate) + dynamic energy threshold
+# ==========================================================
+import os
+import sys
+import time
+import uuid
+import tempfile
+import datetime
+import threading
+import queue
+import concurrent.futures
+from typing import Optional, Tuple, List
+
+import cv2
+import numpy as np
+import requests
+import mysql.connector
+import hashlib
+import face_recognition
+from gtts import gTTS
+
+# === Speech Recognition (untuk mode voice) ===
+_VOICE_OK = False
+try:
+    import speech_recognition as sr
+    _VOICE_OK = True
+except Exception:
+    _VOICE_OK = False
+
+ASSISTANT_NAME = "Jarvis"
+print("[🎙️] Sistem siap. Mode awal: ketik (manual). Ketik 'bantuan' untuk perintah.")
+
+# ---------------------------------------------------------
+# AUDIO BACKENDS (no-GUI) untuk TTS playback (mode ketik)
+# ---------------------------------------------------------
+_USE_PYDUB = False
+_USE_SIMPLEAUDIO = False
+_USE_PYGAME = False
+_USE_PLAYSOUND = False
+try:
+    from pydub import AudioSegment
+    _USE_PYDUB = True
+    try:
+        import simpleaudio as sa
+        _USE_SIMPLEAUDIO = True
+    except Exception:
+        _USE_SIMPLEAUDIO = False
+except Exception:
+    _USE_PYDUB = False
+    _USE_SIMPLEAUDIO = False
+
+try:
+    import pygame
+    _USE_PYGAME = True
+except Exception:
+    _USE_PYGAME = False
+
+try:
+    from playsound import playsound  # fallback; tidak bisa stop di tengah
+    _USE_PLAYSOUND = True
+except Exception:
+    _USE_PLAYSOUND = False
+
+
+def _unique_mp3_path() -> str:
+    tmpdir = tempfile.gettempdir()
+    fname = f"voice_{int(time.time()*1000)}_{uuid.uuid4().hex}.mp3"
+    return os.path.join(tmpdir, fname)
+
+
+# ===============================
+# FLAG MODE VOICE (mute TTS)
+# ===============================
+VOICE_MODE_ACTIVE = False  # True saat listen_voice_loop berjalan
+
+
+# ===============================
+# TTS MANAGER (untuk mode ketik)
+# ===============================
+class TTSManager:
+    def __init__(self):
+        self._q: "queue.Queue[Optional[str]]" = queue.Queue(maxsize=16)
+        self._stop_flag = threading.Event()
+        self._playing = threading.Event()
+        self._worker = threading.Thread(target=self._run, daemon=True)
+        self._current_backend = None
+        self._current_play_obj = None
+        self._worker.start()
+
+    def speak(self, text: str, interrupt: bool = False):
+        if interrupt:
+            self.stop(clear_queue=True)
+        try:
+            self._q.put_nowait(text)
+        except queue.Full:
+            pass
+
+    def is_playing(self) -> bool:
+        return self._playing.is_set()
+
+    def stop(self, clear_queue: bool = False):
+        self._stop_flag.set()
+        # Stop backend yang bisa dihentikan
+        try:
+            if self._current_backend == "simpleaudio" and self._current_play_obj is not None:
+                try:
+                    self._current_play_obj.stop()
+                except Exception:
+                    pass
+            elif self._current_backend == "pygame":
+                try:
+                    if _USE_PYGAME and pygame.mixer.get_init():
+                        pygame.mixer.music.stop()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        if clear_queue:
+            try:
+                while not self._q.empty():
+                    _ = self._q.get_nowait()
+                    self._q.task_done()
+            except Exception:
+                pass
+
+    def shutdown(self):
+        self.stop(clear_queue=True)
+        try:
+            self._q.put_nowait(None)
+        except Exception:
+            pass
+
+    def _run(self):
+        while True:
+            text = self._q.get()
+            if text is None:
+                break
+            self._stop_flag.clear()
+
+            mp3_path = _unique_mp3_path()
+            try:
+                tts = gTTS(text=text, lang="id")
+                tts.save(mp3_path)
+            except Exception:
+                self._q.task_done()
+                continue
+
+            # Jika sudah diminta stop sebelum play, jangan putar
+            if self._stop_flag.is_set():
+                try:
+                    os.remove(mp3_path)
+                except Exception:
+                    pass
+                self._q.task_done()
+                continue
+
+            # Putar
+            self._playing.set()
+            played = False
+            self._current_play_obj = None
+            self._current_backend = None
+
+            try:
+                if _USE_PYDUB and _USE_SIMPLEAUDIO:
+                    try:
+                        from pydub import AudioSegment
+                        seg = AudioSegment.from_file(mp3_path)
+                        self._current_backend = "simpleaudio"
+                        self._current_play_obj = sa.play_buffer(
+                            seg.raw_data,
+                            num_channels=seg.channels,
+                            bytes_per_sample=seg.sample_width,
+                            sample_rate=seg.frame_rate
+                        )
+                        while self._current_play_obj.is_playing():
+                            if self._stop_flag.is_set():
+                                self._current_play_obj.stop()
+                                break
+                            time.sleep(0.02)
+                        played = True
+                    except Exception:
+                        played = False
+
+                if not played and _USE_PYGAME:
+                    try:
+                        self._current_backend = "pygame"
+                        if not pygame.mixer.get_init():
+                            pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=4096)
+                        pygame.mixer.music.load(mp3_path)
+                        pygame.mixer.music.play()
+                        while pygame.mixer.music.get_busy():
+                            if self._stop_flag.is_set():
+                                pygame.mixer.music.stop()
+                                break
+                            time.sleep(0.02)
+                        played = True
+                    except Exception:
+                        played = False
+
+                if not played and _USE_PLAYSOUND:
+                    try:
+                        self._current_backend = "playsound"
+                        playsound(mp3_path)
+                        played = True
+                    except Exception:
+                        played = False
+            finally:
+                self._playing.clear()
+                self._current_play_obj = None
+                self._current_backend = None
+                try:
+                    if os.path.exists(mp3_path):
+                        os.remove(mp3_path)
+                except Exception:
+                    pass
+                self._q.task_done()
+
+
+_tts = TTSManager()
+
+
+def speak(text: str, say: bool = True, interrupt: bool = False):
+    """
+    Cetak + (opsional) TTS.
+    - Saat VOICE_MODE_ACTIVE=True, TTS otomatis dimatikan (say=False), hanya print.
+    """
+    print(f"[{ASSISTANT_NAME}]: {text}")
+    if VOICE_MODE_ACTIVE:
+        return  # diam di mode voice
+    if say:
+        _tts.speak(text, interrupt=interrupt)
+
+
+# ===============================
+# CONFIG
+# ===============================
+TOLERANCE = 0.55
+CAM_INDEX = 1
+USE_CAP_DSHOW = sys.platform.startswith("win")
+ESP32_IP = "192.168.0.108"
+REQUEST_TIMEOUT = 2
+PERSON_SLOT = 1
+
+TIME_ZONE_OFFSET = "+07:00"
+TIME_ZONE_LABEL = "WIB"
+
+# Kamera & deteksi
+FRAME_WIDTH = 640
+FRAME_HEIGHT = 480
+CAPTURE_WARMUP_FRAMES = 3
+CAPTURE_MAX_SECONDS = 1.6
+DETECT_MAX_TRIES = 12
+
+SHOW_PREVIEW = False
+
+# Voice capture
+VOICE_TIMEOUT = 5          # tunggu suara max sekian detik
+VOICE_PHRASE_LIMIT = 4     # durasi rekaman per frasa
+VOICE_RECOG_TIMEOUT = 6    # batas waktu decoding (request recognizer)
+VOICE_MIN_RMS = 200.0     # minimal RMS agar dianggap "suara terbesar" (sesuaikan 800–2000)
+
+db_config = {
+    "host": "localhost",
+    "user": "root",
+    "password": "",
+    "database": "iot_db",
+}
+
+# ===============================
+# DATABASE UTILS
+# ===============================
+def get_connection():
+    conn = mysql.connector.connect(**db_config)
+    try:
+        cur = conn.cursor()
+        cur.execute("SET time_zone = %s", (TIME_ZONE_OFFSET,))
+        conn.commit()
+        cur.close()
+    except Exception:
+        pass
+    return conn
+
+
+def ensure_visit_logs_table():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS visit_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        face_id INT NOT NULL,
+        entry_time DATETIME NOT NULL,
+        exit_time DATETIME NULL,
+        duration_seconds INT NULL
+    )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def fetch_all_encodings() -> Tuple[List[int], List[np.ndarray]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, face_encoding FROM faces")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    ids, encs = [], []
+    for rid, hex_enc in rows:
+        try:
+            ids.append(rid)
+            encs.append(np.frombuffer(bytes.fromhex(hex_enc), dtype=np.float64))
+        except Exception:
+            pass
+    return ids, encs
+
+
+def insert_face(name: str, encoding: np.ndarray) -> int:
+    enc_hex = encoding.tobytes().hex()
+    fhash = hashlib.sha1(np.round(encoding / np.linalg.norm(encoding), 3).tobytes()).hexdigest()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO faces (name, face_encoding, face_hash, status) VALUES (%s, %s, %s, 'outside')",
+        (name, enc_hex, fhash),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    cur.close()
+    conn.close()
+    return new_id
+
+
+def get_status(face_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT status FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else None
+
+
+def set_status(face_id: int, status: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE faces SET status = %s WHERE id = %s", (status, face_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_name(face_id: int) -> str:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row and row[0]:
+        return row[0]
+    return f"ID {face_id}"
+
+
+def get_visit_count(face_id: int) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT visit_count FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row is None or row[0] is None:
+        return 0
+    return int(row[0])
+
+
+def increment_visit_count(face_id: int, step: int = 1) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE faces SET visit_count = COALESCE(visit_count, 0) + %s WHERE id = %s",
+        (step, face_id),
+    )
+    conn.commit()
+    cur.execute("SELECT visit_count FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def start_visit(face_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, entry_time
+        FROM visit_logs
+        WHERE face_id=%s AND exit_time IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    """, (face_id,))
+    row = cur.fetchone()
+    if row:
+        log_id, entry_time = row[0], row[1]
+    else:
+        cur.execute("INSERT INTO visit_logs (face_id, entry_time) VALUES (%s, NOW())", (face_id,))
+        conn.commit()
+        log_id = cur.lastrowid
+        cur.execute("SELECT entry_time FROM visit_logs WHERE id=%s", (log_id,))
+        entry_row = cur.fetchone()
+        entry_time = entry_row[0] if entry_row else None
+    cur.close()
+    conn.close()
+    return log_id, entry_time
+
+
+def end_visit(face_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, entry_time
+        FROM visit_logs
+        WHERE face_id=%s AND exit_time IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    """, (face_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return None, None, None, None
+    log_id, entry_time = row[0], row[1]
+    cur.execute("""
+        UPDATE visit_logs
+        SET exit_time = NOW(),
+            duration_seconds = TIMESTAMPDIFF(SECOND, entry_time, NOW())
+        WHERE id = %s
+    """, (log_id,))
+    conn.commit()
+    cur.execute("SELECT duration_seconds, exit_time FROM visit_logs WHERE id=%s", (log_id,))
+    r2 = cur.fetchone()
+    duration_seconds = int(r2[0]) if r2 and r2[0] is not None else None
+    exit_time = r2[1] if r2 else None
+    cur.close()
+    conn.close()
+    return log_id, duration_seconds, entry_time, exit_time
+
+
+def count_people_inside() -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM faces WHERE status = 'inside'")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def list_people_inside() -> List[str]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM faces WHERE status = 'inside' ORDER BY name")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [r[0] for r in rows if r and r[0]]
+
+
+def last_entry() -> Optional[Tuple[str, datetime.datetime]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT f.name, v.entry_time
+        FROM visit_logs v
+        JOIN faces f ON f.id = v.face_id
+        ORDER BY v.entry_time DESC
+        LIMIT 1
+    """)
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return None
+    return row[0], row[1]
+
+
+# ===============================
+# ESP32
+# ===============================
+def send_event(face_id: int, event: str, name: str = "", is_new: bool = False):
+    url = f"http://{ESP32_IP}/event"
+    if not name:
+        name = get_name(face_id)
+    data = {"event": event, "id": face_id, "name": name, "new": 1 if is_new else 0, "person": PERSON_SLOT}
+    try:
+        resp = requests.post(url, json=data, timeout=REQUEST_TIMEOUT)
+        print("[ESP32]", resp.status_code, resp.text)
+        return True
+    except Exception:
+        return False
+
+
+def query_status_from_esp32(face_id: int):
+    url = f"http://{ESP32_IP}/event"
+    data = {"event": "query", "id": face_id, "person": PERSON_SLOT, "name": get_name(face_id)}
+    try:
+        resp = requests.post(url, json=data, timeout=REQUEST_TIMEOUT)
+        j = resp.json() if resp.status_code == 200 else None
+        return True, j.get("status") if j else None, j, resp.status_code
+    except Exception:
+        return False, None, None, None
+
+
+def ping_esp32() -> bool:
+    try:
+        resp = requests.get(f"http://{ESP32_IP}", timeout=REQUEST_TIMEOUT)
+        return 200 <= resp.status_code < 400
+    except Exception:
+        return False
+
+
+# ===============================
+# CAMERA / FACE (FAST DETECT)
+# ===============================
+_HAAR = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+def _open_capture():
+    if USE_CAP_DSHOW:
+        cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(CAM_INDEX)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    return cap
+
+
+def _detect_faces_haar(bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    gray = _CLAHE.apply(gray)
+    faces = _HAAR.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=4,
+        minSize=(80, 80),
+        flags=cv2.CASCADE_SCALE_IMAGE
+    )
+    return [(int(x), int(y), int(w), int(h)) for (x, y, w, h) in faces]
+
+
+def _pick_largest_face(faces: List[Tuple[int, int, int, int]]) -> Optional[Tuple[int, int, int, int]]:
+    if not faces:
+        return None
+    areas = [w*h for (_, _, w, h) in faces]
+    idx = int(np.argmax(areas))
+    return faces[idx]
+
+
+def _encode_face_from_bbox(bgr: np.ndarray, face_bbox: Tuple[int, int, int, int]) -> Optional[np.ndarray]:
+    x, y, w, h = face_bbox
+    pad = int(0.15 * max(w, h))
+    x1 = max(0, x - pad)
+    y1 = max(0, y - pad)
+    x2 = min(bgr.shape[1], x + w + pad)
+    y2 = min(bgr.shape[0], y + h + pad)
+    face_crop = bgr[y1:y2, x1:x2]
+    if face_crop.size == 0:
+        return None
+
+    rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+    boxes = face_recognition.face_locations(rgb, model="hog")
+    if not boxes:
+        return None
+    encs = face_recognition.face_encodings(rgb, known_face_locations=boxes)
+    return encs[0] if encs else None
+
+
+def detect_face_fast(timeout_sec: float = CAPTURE_MAX_SECONDS) -> Optional[np.ndarray]:
+    cap = _open_capture()
+    if not cap.isOpened():
+        print("[❌] Kamera gagal dibuka")
+        return None
+
+    for _ in range(CAPTURE_WARMUP_FRAMES):
+        cap.read()
+
+    start = time.time()
+    tries = 0
+    enc_found = None
+    last_frame = None
+
+    while time.time() - start < timeout_sec and tries < DETECT_MAX_TRIES:
+        tries += 1
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        last_frame = frame
+
+        faces = _detect_faces_haar(frame)
+        if not faces:
+            continue
+
+        best = _pick_largest_face(faces)
+        enc = _encode_face_from_bbox(frame, best)
+        if enc is not None:
+            enc_found = enc
+            break
+
+    cap.release()
+    if enc_found is None and SHOW_PREVIEW and last_frame is not None:
+        cv2.imshow("LAST_FRAME", last_frame)
+        cv2.waitKey(300)
+        cv2.destroyWindow("LAST_FRAME")
+    return enc_found
+
+
+# ===============================
+# CACHE ENCODINGS
+# ===============================
+ENC_IDS: List[int] = []
+ENC_VECS: List[np.ndarray] = []
+
+def load_encodings_cache():
+    global ENC_IDS, ENC_VECS
+    ENC_IDS, ENC_VECS = fetch_all_encodings()
+    print(f"[⚡] Cache encodings dimuat: {len(ENC_IDS)} wajah")
+
+def add_encoding_to_cache(face_id: int, enc: np.ndarray):
+    global ENC_IDS, ENC_VECS
+    ENC_IDS.append(face_id)
+    ENC_VECS.append(enc)
+
+def recognize_face_encoding(enc: np.ndarray) -> Tuple[bool, Optional[int], Optional[float]]:
+    if not ENC_VECS:
+        return False, None, None
+    dists = face_recognition.face_distance(ENC_VECS, enc)
+    idx = int(np.argmin(dists))
+    dist = float(dists[idx])
+    if dist <= TOLERANCE:
+        return True, ENC_IDS[idx], dist
+    return False, None, dist
+
+
+# ===============================
+# INPUT: MANUAL
+# ===============================
+def listen_manual() -> str:
+    try:
+        return input("Perintah: ").lower().strip()
+    except Exception:
+        return ""
+
+
+# ===============================
+# INPUT: VOICE (tanpa bicara)
+# ===============================
+def _recognize_with_timeout(recognizer, audio, language="id-ID", timeout_seconds=VOICE_RECOG_TIMEOUT):
+    """Jalankan recognize_google di thread terpisah agar bisa di-timeout."""
+    def _task():
+        return recognizer.recognize_google(audio, language=language)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(_task)
+        try:
+            text = fut.result(timeout=timeout_seconds)
+            return True, text
+        except concurrent.futures.TimeoutError:
+            return False, "timeout"
+        except Exception as e:
+            return False, str(e)
+
+
+def _audio_rms(audio: "sr.AudioData") -> float:
+    """Hitung RMS untuk mengukur kekuatan (volume) sinyal."""
+    try:
+        raw = audio.get_raw_data()
+        # assume 16-bit
+        arr = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+        if arr.size == 0:
+            return 0.0
+        rms = float(np.sqrt(np.mean(arr**2)))
+        return rms
+    except Exception:
+        return 0.0
+
+
+def listen_voice_loop() -> Optional[str]:
+    """
+    Mode voice:
+    - Tidak ada TTS sama sekali; hanya print.
+    - Dengarkan perintah, prioritaskan sinyal kuat (RMS >= VOICE_MIN_RMS).
+    - Ucapkan "keluar mode suara" untuk kembali (Anda mengucapkan, sistem diam).
+    """
+    global VOICE_MODE_ACTIVE
+    if not _VOICE_OK:
+        print("[INFO] Mode voice tidak tersedia. Install: pip install pyaudio speechrecognition")
+        return None
+
+    VOICE_MODE_ACTIVE = True  # MUTE semua TTS
+    print("[🎧] Mode voice AKTIF. Bicara perintah Anda. Ucapkan 'keluar mode suara' untuk kembali.")
+
+    r = sr.Recognizer()
+    r.dynamic_energy_threshold = True
+    r.energy_threshold = 300       # baseline; akan disesuaikan otomatis
+    r.pause_threshold = 0.6        # responsif
+    r.phrase_threshold = 0.2
+    r.non_speaking_duration = 0.2
+
+    try:
+        mic = sr.Microphone()
+    except Exception:
+        print("[❌] Mikrofon tidak terdeteksi.")
+        VOICE_MODE_ACTIVE = False
+        return None
+
+    while True:
+        try:
+            with mic as source:
+                r.adjust_for_ambient_noise(source, duration=0.5)
+                print("[🎤] Mendengarkan...")
+                audio = r.listen(source, timeout=VOICE_TIMEOUT, phrase_time_limit=VOICE_PHRASE_LIMIT)
+
+            # Seleksi hanya sinyal yang cukup kuat (prioritas suara terbesar)
+            rms = _audio_rms(audio)
+            # Debug RMS (opsional)
+            # print(f"[DBG] RMS={rms:.1f}")
+            if rms < VOICE_MIN_RMS:
+                print("[ℹ️] Suara terlalu pelan/berisik, abaikan. Coba lebih dekat/tegas.")
+                continue
+
+            print("[🧠] Memahami...")
+            ok_rec, result = _recognize_with_timeout(r, audio, language="id-ID")
+            if not ok_rec:
+                if result == "timeout":
+                    print("[ℹ️] Memahami timeout. Ulangi singkat atau periksa koneksi.")
+                else:
+                    print("[ℹ️] Gagal memahami. " + ("Periksa koneksi." if "connection" in str(result).lower() else "Coba ulangi."))
+                continue
+
+            cmd = result.lower().strip()
+            print(f"[Anda (Suara)]: {cmd}")
+
+            # Keluar dari mode voice
+            if cmd in ("keluar mode suara", "mode manual", "berhenti mode suara"):
+                print("[🎧] Mode voice DIMATIKAN. Kembali ke mode ketik.")
+                VOICE_MODE_ACTIVE = False
+                return None
+
+            # Eksekusi perintah TANPA suara balasan
+            status = process_command(cmd, speak_out=False)
+            if status == "exit":
+                VOICE_MODE_ACTIVE = False
+                return "exit"
+
+        except sr.WaitTimeoutError:
+            print("[⏳] Tidak ada suara terdeteksi, coba lagi...")
+            continue
+        except sr.UnknownValueError:
+            print("[ℹ️] Tidak terdengar jelas. Ulangi.")
+        except sr.RequestError:
+            print("[ℹ️] Layanan pengenalan suara tidak tersedia saat ini.")
+            time.sleep(0.6)
+        except KeyboardInterrupt:
+            print("\n[⏹️] Mode voice dihentikan oleh pengguna.")
+            VOICE_MODE_ACTIVE = False
+            return None
+        except Exception as e:
+            print(f"[⚠️] Error mode voice: {e}")
+            continue
+
+
+# ===============================
+# HELPER HUMANIZE
+# ===============================
+def humanize_names(names: List[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " dan " + names[-1]
+
+
+def fmt_time(dt: Optional[datetime.datetime]) -> str:
+    if dt is None:
+        return "-"
+    return dt.strftime("%H:%M:%S")
+
+
+def fmt_hms(seconds: Optional[int]) -> str:
+    if seconds is None:
+        return "00:00:00"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def time_of_day_label(now: Optional[datetime.datetime] = None) -> str:
+    if now is None:
+        now = datetime.datetime.now()
+    h = now.hour
+    if 5 <= h <= 10:
+        return "Pagi"
+    elif 11 <= h <= 14:
+        return "Siang"
+    elif 15 <= h <= 18:
+        return "Sore"
+    else:
+        return "Malam"
+
+
+# ===============================
+# PROCESS COMMAND (dipakai ketik & voice)
+# ===============================
+def process_command(command: str, speak_out: bool = True) -> str:
+    """
+    speak_out=True  -> boleh bicara (dipakai MODE KETIK)
+    speak_out=False -> DIAM (dipakai MODE VOICE)
+    """
+    if not command:
+        return "continue"
+
+    # Stop suara lama bila ada (hanya relevan di mode ketik)
+    if not VOICE_MODE_ACTIVE:
+        _tts.stop(clear_queue=True)
+
+    # --- KOMUNIKASI / SMALL TALK ---
+    if any(x in command for x in ["halo", "hai", "hello"]):
+        speak(f"Halo, aku {ASSISTANT_NAME}. Siap membantu.", say=speak_out)
+        return "continue"
+
+    if "bantuan" in command:
+        speak("Perintah: daftar, masuk, keluar, berapa orang di dalam, siapa di dalam, "
+              "kunjungan saya berapa, status saya, siapa terakhir masuk, muat ulang cache, "
+              "ping perangkat, versi, mode suara, keluar program", say=speak_out)
+        return "continue"
+
+    if "versi" in command:
+        speak(f"{ASSISTANT_NAME} (fast+voice no-speak). Kamera {CAM_INDEX}, toleransi {TOLERANCE}, ESP32 {ESP32_IP}",
+              say=speak_out)
+        return "continue"
+
+    if "muat ulang cache" in command or "reload cache" in command:
+        load_encodings_cache()
+        speak("Cache wajah dimuat ulang.", say=speak_out)
+        return "continue"
+
+    if "ping perangkat" in command:
+        ok = ping_esp32()
+        speak("ESP32 terhubung." if ok else "ESP32 tidak merespon.", say=speak_out)
+        return "continue"
+
+    if "siapa terakhir masuk" in command:
+        le = last_entry()
+        if not le:
+            speak("Belum ada data kunjungan.", say=speak_out)
+        else:
+            nama, masuk_time = le
+            speak(f"Masuk terakhir: {nama} pukul {fmt_time(masuk_time)} {TIME_ZONE_LABEL}.", say=speak_out)
+        return "continue"
+
+    if "berapa orang" in command:
+        jumlah = count_people_inside()
+        names = list_people_inside()
+        if jumlah == 0:
+            speak("Tidak ada orang di dalam ruangan.", say=speak_out)
+        else:
+            speak(f"{jumlah} orang di dalam: {humanize_names(names)}.", say=speak_out)
+        return "continue"
+
+    if "siapa di dalam" in command:
+        names = list_people_inside()
+        if not names:
+            speak("Tidak ada orang di dalam.", say=speak_out)
+        else:
+            speak(f"Orang di dalam: {humanize_names(names)}.", say=speak_out)
+        return "continue"
+
+    if "daftar" in command or "registrasi" in command:
+        speak("Silakan hadapkan wajah ke kamera.", say=speak_out)
+        time.sleep(0.2)
+        enc = detect_face_fast(timeout_sec=2.0)
+        if enc is None:
+            speak("Wajah tidak terdeteksi.", say=speak_out)
+            return "continue"
+        name = input("Masukkan nama: ").strip()
+        if name == "":
+            speak("Nama tidak boleh kosong.", say=speak_out)
+            return "continue"
+        ok_match, match_id, _ = recognize_face_encoding(enc)
+        if ok_match:
+            speak(f"Wajah sudah ada di database, ID {match_id}.", say=speak_out)
+            return "continue"
+        new_id = insert_face(name, enc)
+        add_encoding_to_cache(new_id, enc)
+        send_event(new_id, "daftar", name=name, is_new=True)
+        speak(f"Wajah {name} berhasil didaftarkan.", say=speak_out)
+        return "continue"
+
+    if "masuk" in command:
+        speak("Silakan hadapkan wajah ke kamera.", say=speak_out)
+        enc = detect_face_fast(timeout_sec=1.8)
+        if enc is None:
+            speak("Wajah tidak terdeteksi.", say=speak_out)
+            return "continue"
+        ok, face_id, _ = recognize_face_encoding(enc)
+        if not ok:
+            speak("Wajah tidak dikenali. Silakan daftar terlebih dahulu.", say=speak_out)
+            return "continue"
+        status = get_status(face_id)
+        if status == "inside":
+            speak(f"{get_name(face_id)} sudah berada di dalam.", say=speak_out)
+            return "continue"
+        set_status(face_id, "inside")
+        start_visit(face_id)
+        increment_visit_count(face_id, 1)
+        send_event(face_id, "masuk")
+        speak(f"{get_name(face_id)} berhasil masuk.", say=speak_out)
+        return "continue"
+
+    if ("keluar" in command) and ("program" not in command):
+        speak("Silakan hadapkan wajah ke kamera.", say=speak_out)
+        enc = detect_face_fast(timeout_sec=1.8)
+        if enc is None:
+            speak("Wajah tidak terdeteksi.", say=speak_out)
+            return "continue"
+        ok, face_id, _ = recognize_face_encoding(enc)
+        if not ok:
+            speak("Wajah tidak dikenali.", say=speak_out)
+            return "continue"
+        status = get_status(face_id)
+        if status != "inside":
+            speak(f"{get_name(face_id)} sedang tidak di dalam.", say=speak_out)
+            return "continue"
+        set_status(face_id, "outside")
+        _, duration_seconds, _, _ = end_visit(face_id)
+        send_event(face_id, "keluar")
+        speak(f"{get_name(face_id)} berhasil keluar. Durasi: {fmt_hms(duration_seconds)}.", say=speak_out)
+        return "continue"
+
+    if "kunjungan saya" in command or "visit saya" in command:
+        enc = detect_face_fast(timeout_sec=2.0)
+        if enc is None:
+            speak("Wajah tidak terdeteksi.", say=speak_out)
+            return "continue"
+        ok, face_id, _ = recognize_face_encoding(enc)
+        if not ok:
+            speak("Wajah tidak dikenali.", say=speak_out)
+            return "continue"
+        total = get_visit_count(face_id)
+        speak(f"{get_name(face_id)} sudah melakukan {total} kunjungan.", say=speak_out)
+        return "continue"
+
+    if "status saya" in command:
+        enc = detect_face_fast(timeout_sec=2.0)
+        if enc is None:
+            speak("Wajah tidak terdeteksi.", say=speak_out)
+            return "continue"
+        ok, face_id, _ = recognize_face_encoding(enc)
+        if not ok:
+            speak("Wajah tidak dikenali.", say=speak_out)
+            return "continue"
+        status = get_status(face_id)
+        speak(f"{get_name(face_id)} saat ini {status}.", say=speak_out)
+        return "continue"
+
+    if "keluar program" in command or command == "exit":
+        speak("Program dihentikan. Sampai jumpa!", say=speak_out)
+        return "exit"
+
+    if "mode suara" in command:
+        # Di main loop akan masuk ke listen_voice_loop (tanpa bicara)
+        speak("Mengaktifkan mode suara...", say=speak_out)
+        return "continue"
+
+    speak("Perintah tidak dikenali. Ketik 'bantuan' untuk daftar perintah.", say=speak_out)
+    return "continue"
+
+
+# ===============================
+# MAIN LOOP
+# ===============================
+def main():
+    ensure_visit_logs_table()
+    load_encodings_cache()
+    greet = time_of_day_label()
+    speak(f"Selamat {greet}. Sistem siap. Silakan ketik perintah.")
+
+    try:
+        while True:
+            command = listen_manual()
+            if not command:
+                continue
+
+            # Saat mode ketik, jika ada suara berjalan hentikan
+            if not VOICE_MODE_ACTIVE:
+                _tts.stop(clear_queue=True)
+
+            if "mode suara" in command:
+                result = listen_voice_loop()
+                if result == "exit":
+                    break
+                # selesai voice -> kembali mode ketik (TTS aktif lagi)
+                speak("Kembali ke mode ketik.")
+                continue
+
+            status = process_command(command, speak_out=True)
+            if status == "exit":
+                break
+
+    except KeyboardInterrupt:
+        print("\n[⏹️] Dihentikan oleh pengguna.")
+    finally:
+        _tts.shutdown()
+
+
+if __name__ == "__main__":
+    # Set ukuran frame di awal agar konsisten
+    FRAME_WIDTH = 640
+    FRAME_HEIGHT = 480
+    main()

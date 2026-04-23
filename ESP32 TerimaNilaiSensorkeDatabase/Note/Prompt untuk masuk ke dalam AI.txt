@@ -1,0 +1,7 @@
+conda activate face38
+cd /d "D:\Data\OpenCAM\face_recognition"
+python iot_mock.py
+
+conda activate face38
+cd /d "D:\Data\OpenCAM\face_recognition"
+python face_system.py

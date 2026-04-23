@@ -13,7 +13,7 @@
 // === WiFi dan API ===
 const char* ssid = "My IoT";
 const char* password = "12345678";
-const char* apiEndpoint = "http://10.165.23.8:8000/api/sensors";
+const char* apiEndpoint = "http://10.165.23.7:8000/api/sensors";
 
 int peopleCount = 0;
 const int maxPeople = 15;

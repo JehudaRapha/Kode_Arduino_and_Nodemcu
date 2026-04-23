@@ -8,7 +8,7 @@
 // === WiFi dan API ===
 const char* ssid = "SatuConnect-Event";
 const char* password = "univ11univ";
-const char* apiEndpoint = "http://10.103.48.28:8000/api/sensors";
+const char* apiEndpoint = "http://10.103.26.77:8000/api/sensors";
 
 int peopleCount = 0;        // jumlah orang di dalam
 const int maxPeople = 15;

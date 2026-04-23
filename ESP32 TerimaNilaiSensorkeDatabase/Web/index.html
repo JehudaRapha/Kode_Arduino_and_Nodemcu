@@ -1,10 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IoT Room Occupancy Dashboard</title>
-    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/10644/10644640.png">
+    <link
+      rel="icon"
+      href="https://cdn-icons-png.flaticon.com/512/10644/10644640.png"
+    />
     <style>
       :root {
         --accent-light: #ff8a50;
@@ -12,13 +15,11 @@
         --accent-dark: #7b241c;
         --text-light: #fff3e0;
       }
-
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
       }
-
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         min-height: 100vh;
@@ -28,7 +29,6 @@
         background: radial-gradient(circle at center, #3a0d00, #1a0500 85%);
         overflow-x: hidden;
       }
-
       /* Background layer */
       .bg-image {
         position: fixed;
@@ -38,14 +38,11 @@
         opacity: 0.45;
         filter: brightness(0.9) contrast(1.1) saturate(1.3);
       }
-
       .bg-gradient {
         position: fixed;
         inset: 0;
-        background: linear-gradient(
-            rgba(80, 25, 5, 0.8),
-            rgba(20, 10, 5, 0.9)
-          ),
+        background:
+          linear-gradient(rgba(80, 25, 5, 0.8), rgba(20, 10, 5, 0.9)),
           radial-gradient(
             circle at 25% 35%,
             rgba(255, 130, 70, 0.3),
@@ -59,7 +56,6 @@
         z-index: -2;
         animation: hueShift 15s ease-in-out infinite alternate;
       }
-
       @keyframes hueShift {
         0% {
           filter: hue-rotate(0deg);
@@ -68,7 +64,6 @@
           filter: hue-rotate(30deg);
         }
       }
-
       /* Floating particles */
       .particles {
         position: fixed;
@@ -77,7 +72,6 @@
         z-index: -1;
         pointer-events: none;
       }
-
       .particle {
         position: absolute;
         bottom: -40px;
@@ -90,7 +84,6 @@
         animation: floatUp 15s linear infinite;
         filter: drop-shadow(0 0 10px rgba(255, 138, 80, 0.6));
       }
-
       @keyframes floatUp {
         0% {
           transform: translateY(0) rotate(0deg);
@@ -101,7 +94,6 @@
           opacity: 0;
         }
       }
-
       /* HEADER */
       .header {
         position: fixed;
@@ -119,13 +111,11 @@
         z-index: 10;
         box-shadow: 0 5px 25px rgba(0, 0, 0, 0.6);
       }
-
       .header-left {
         display: flex;
         align-items: center;
         gap: 15px;
       }
-
       .logo {
         width: 55px;
         height: 55px;
@@ -144,7 +134,6 @@
         box-shadow: 0 0 25px rgba(255, 140, 80, 0.6);
         animation: pulse 2s ease-in-out infinite alternate;
       }
-
       @keyframes pulse {
         from {
           transform: scale(1);
@@ -155,46 +144,41 @@
           box-shadow: 0 0 40px rgba(255, 140, 80, 0.8);
         }
       }
-
       .title-section {
         display: flex;
         flex-direction: column;
         line-height: 1.3;
       }
-
       .main-title {
         font-size: 22px;
         font-weight: 700;
         color: #ffe0b2;
       }
-
       .sub-title {
         font-size: 13px;
         color: #ffccbc;
         letter-spacing: 1px;
       }
-
       #connectionStatus {
         display: flex;
         align-items: center;
         gap: 8px;
         font-size: 15px;
       }
-
       .status-indicator {
         width: 12px;
         height: 12px;
         border-radius: 50%;
         background: #7cfc00;
         box-shadow: 0 0 10px #7cfc00;
-        transition: background 0.4s, box-shadow 0.4s;
+        transition:
+          background 0.4s,
+          box-shadow 0.4s;
       }
-
       .offline {
         background: #ff6347 !important;
         box-shadow: 0 0 10px #ff6347;
       }
-
       /* MAIN CONTENT */
       .slogan {
         position: relative;
@@ -209,7 +193,6 @@
         user-select: none;
         animation: fadeGlow 3s ease-in-out infinite alternate;
       }
-
       @keyframes fadeGlow {
         0% {
           opacity: 0.5;
@@ -220,7 +203,6 @@
           text-shadow: 0 0 35px rgba(255, 140, 80, 0.6);
         }
       }
-
       .main-container {
         flex: 1;
         display: flex;
@@ -228,7 +210,6 @@
         align-items: flex-start;
         padding: 40px 20px 80px;
       }
-
       .dashboard-layout {
         display: flex;
         flex-wrap: wrap;
@@ -237,7 +218,6 @@
         width: 100%;
         max-width: 1200px;
       }
-
       .card {
         flex: 1 1 480px;
         background: linear-gradient(
@@ -248,18 +228,19 @@
         backdrop-filter: blur(20px);
         padding: 50px 60px;
         border-radius: 30px;
-        box-shadow: 0 15px 70px rgba(0, 0, 0, 0.8),
+        box-shadow:
+          0 15px 70px rgba(0, 0, 0, 0.8),
           inset 0 0 60px rgba(255, 160, 80, 0.15);
         text-align: center;
-        transition: transform 0.5s ease, box-shadow 0.5s ease;
+        transition:
+          transform 0.5s ease,
+          box-shadow 0.5s ease;
         animation: floatCard 6s ease-in-out infinite alternate;
       }
-
       .card:hover {
         transform: translateY(-10px) scale(1.03);
         box-shadow: 0 30px 100px rgba(255, 140, 60, 0.4);
       }
-
       @keyframes floatCard {
         from {
           transform: translateY(0);
@@ -268,7 +249,6 @@
           transform: translateY(-10px);
         }
       }
-
       .side-card {
         flex: 0 1 300px;
         background: rgba(255, 150, 80, 0.1);
@@ -279,7 +259,6 @@
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
         animation: glowCard 5s infinite alternate ease-in-out;
       }
-
       @keyframes glowCard {
         from {
           box-shadow: 0 0 30px rgba(255, 150, 80, 0.1);
@@ -288,7 +267,6 @@
           box-shadow: 0 0 60px rgba(255, 180, 120, 0.5);
         }
       }
-
       .title {
         font-size: 22px;
         color: #ffccbc;
@@ -296,7 +274,6 @@
         letter-spacing: 2px;
         text-transform: uppercase;
       }
-
       .jumlah {
         font-size: 90px;
         font-weight: bold;
@@ -304,19 +281,20 @@
         text-shadow: 0 0 20px rgba(255, 180, 90, 0.5);
         transition: all 0.3s ease;
       }
-
       .jumlah.increase {
         color: #90ee90;
-        text-shadow: 0 0 30px #90ee90, 0 0 60px #32cd32;
+        text-shadow:
+          0 0 30px #90ee90,
+          0 0 60px #32cd32;
         animation: popUp 0.8s ease;
       }
-
       .jumlah.decrease {
         color: #ff7b7b;
-        text-shadow: 0 0 30px #ff7b7b, 0 0 60px #ff3333;
+        text-shadow:
+          0 0 30px #ff7b7b,
+          0 0 60px #ff3333;
         animation: popUp 0.8s ease;
       }
-
       @keyframes popUp {
         0% {
           transform: scale(1);
@@ -331,11 +309,81 @@
           transform: scale(1);
         }
       }
-
       .footer {
         font-size: 13px;
         color: #ffccbc;
         margin-top: 20px;
+      }
+
+      /* ===== Room Status (Available / Full) - kode lama tetap ada ===== */
+      .room-status {
+        margin-top: 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        font-weight: 800;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        font-size: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(10px);
+      }
+      .room-status .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 12px currentColor;
+      }
+      /* pakai code color (hex) */
+      .room-status.available {
+        color: #00e676;
+        background: rgba(0, 230, 118, 0.12);
+        border-color: rgba(0, 230, 118, 0.35);
+      }
+      .room-status.full {
+        color: #ff1744;
+        background: rgba(255, 23, 68, 0.12);
+        border-color: rgba(255, 23, 68, 0.35);
+      }
+
+      /* ✅ Sesuai gambar: sembunyikan badge kecil di dalam card (kode tidak dihapus) */
+      .card .room-status {
+        display: none;
+      }
+
+      /* ✅ Status bar memanjang di bawah (seperti screenshot) */
+      .status-bar {
+        width: 100%;
+        max-width: 1200px;
+        margin: 24px auto 0;
+        padding: 12px 18px;
+        border-radius: 14px;
+        text-align: center;
+        background: rgba(40, 10, 5, 0.55);
+        border: 1px solid rgba(255, 160, 80, 0.25);
+        box-shadow:
+          0 10px 35px rgba(0, 0, 0, 0.55),
+          inset 0 0 40px rgba(255, 160, 80, 0.08);
+        backdrop-filter: blur(14px);
+        letter-spacing: 0.5px;
+        font-weight: 700;
+        color: #ffccbc;
+      }
+      .status-bar .value {
+        font-weight: 900;
+      }
+
+      /* pakai code color (hex) untuk status di bar */
+      .status-bar.available .value {
+        color: #00e676;
+        text-shadow: 0 0 16px rgba(0, 230, 118, 0.55);
+      }
+      .status-bar.full .value {
+        color: #ff1744;
+        text-shadow: 0 0 16px rgba(255, 23, 68, 0.55);
       }
 
       @media (max-width: 900px) {
@@ -353,7 +401,6 @@
       }
     </style>
   </head>
-
   <body>
     <img src="download.png" alt="City background" class="bg-image" />
     <div class="bg-gradient"></div>
@@ -376,16 +423,33 @@
     <div class="slogan">"Satu Langkah Lebih Maju."</div>
 
     <div class="main-container">
-      <div class="dashboard-layout">
-        <div class="card">
-          <div class="title">Current Occupancy</div>
-          <div class="jumlah" id="jumlah">0</div>
-          <div class="footer">Developed by a Student of Informatics and Information Systems</div>
+      <div style="width: 100%; max-width: 1200px">
+        <div class="dashboard-layout">
+          <div class="card">
+            <div class="title">Current Occupancy</div>
+            <div class="jumlah" id="jumlah">0</div>
+
+            <!-- ✅ Kode lama: status badge (tetap ada, disembunyikan via CSS agar sesuai screenshot) -->
+            <div class="room-status available" id="roomStatus">
+              <span class="dot"></span>
+              <span id="roomStatusText">Available</span>
+            </div>
+
+            <div class="footer">
+              Developed by a Student of Informatics and Information Systems
+            </div>
+          </div>
+
+          <div class="side-card">
+            <div class="title">Total Today</div>
+            <div class="jumlah" id="totalToday">0</div>
+          </div>
         </div>
 
-        <div class="side-card">
-          <div class="title">Total Today</div>
-          <div class="jumlah" id="totalToday">0</div>
+        <!-- ✅ Sesuai screenshot: status bar di bawah -->
+        <div class="status-bar available" id="roomStatusBar">
+          Status Ruangan :
+          <span class="value" id="roomStatusTextBar">Available</span>
         </div>
       </div>
     </div>
@@ -393,13 +457,29 @@
     <script>
       const API_URL = "http://localhost:8000/api/sensors";
       const API_URL2 = "http://localhost:8000/api/sensors/today";
+
       const jumlahEl = document.getElementById("jumlah");
       const totalTodayEl = document.getElementById("totalToday");
       const statusText = document.getElementById("statusText");
       const statusDot = document.getElementById("statusDot");
+
+      // ✅ Kode lama (badge) tetap dipakai, meskipun disembunyikan via CSS
+      const roomStatusEl = document.getElementById("roomStatus");
+      const roomStatusTextEl = document.getElementById("roomStatusText");
+
+      // ✅ Tambahan untuk status bar (sesuai screenshot)
+      const roomStatusBarEl = document.getElementById("roomStatusBar");
+      const roomStatusTextBarEl = document.getElementById("roomStatusTextBar");
+
       let lastValue = 0;
       let isOnline = true;
       let consecutiveErrors = 0;
+
+      // ✅ aturan: FULL >= 15, available lagi setelah 5 orang keluar => <= 10
+      let roomIsFull = false;
+      const FULL_THRESHOLD = 15;
+      const RELEASE_DELTA = 5;
+      const AVAILABLE_THRESHOLD = FULL_THRESHOLD - RELEASE_DELTA; // 10
 
       async function fetchJumlah() {
         try {
@@ -408,11 +488,17 @@
           if (json.summary) {
             const newValue = json.summary.orang_di_dalam;
             const oldValue = lastValue;
+
+            // ✅ update status ruangan (badge + status bar)
+            updateRoomStatus(newValue);
+
             if (newValue !== oldValue) {
               jumlahEl.textContent = newValue;
               jumlahEl.classList.remove("increase", "decrease");
               void jumlahEl.offsetWidth;
-              jumlahEl.classList.add(newValue > oldValue ? "increase" : "decrease");
+              jumlahEl.classList.add(
+                newValue > oldValue ? "increase" : "decrease",
+              );
               lastValue = newValue;
             }
             consecutiveErrors = 0;
@@ -420,8 +506,7 @@
           }
         } catch {
           consecutiveErrors++;
-          if (consecutiveErrors >= 3 && isOnline)
-            updateConnectionStatus(false);
+          if (consecutiveErrors >= 3 && isOnline) updateConnectionStatus(false);
         }
       }
 
@@ -436,8 +521,32 @@
           }
         } catch {
           consecutiveErrors++;
-          if (consecutiveErrors >= 3 && isOnline)
-            updateConnectionStatus(false);
+          if (consecutiveErrors >= 3 && isOnline) updateConnectionStatus(false);
+        }
+      }
+
+      function updateRoomStatus(currentOccupancy) {
+        // FULL jika >= 15
+        if (!roomIsFull && currentOccupancy >= FULL_THRESHOLD) {
+          roomIsFull = true;
+        }
+        // Jika sudah FULL, baru balik AVAILABLE kalau <= 10 (tunggu 5 orang keluar)
+        else if (roomIsFull && currentOccupancy <= AVAILABLE_THRESHOLD) {
+          roomIsFull = false;
+        }
+
+        // update badge (kode lama)
+        if (roomStatusEl && roomStatusTextEl) {
+          roomStatusEl.classList.toggle("full", roomIsFull);
+          roomStatusEl.classList.toggle("available", !roomIsFull);
+          roomStatusTextEl.textContent = roomIsFull ? "Full" : "Available";
+        }
+
+        // update status bar (sesuai screenshot)
+        if (roomStatusBarEl && roomStatusTextBarEl) {
+          roomStatusBarEl.classList.toggle("full", roomIsFull);
+          roomStatusBarEl.classList.toggle("available", !roomIsFull);
+          roomStatusTextBarEl.textContent = roomIsFull ? "Full" : "Available";
         }
       }
 

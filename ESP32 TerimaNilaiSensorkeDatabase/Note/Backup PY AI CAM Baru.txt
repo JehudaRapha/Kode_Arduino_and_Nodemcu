@@ -1,0 +1,895 @@
+#!/usr/bin/env python3
+# ==========================================================
+# face_system_gtts_modern_ui.py
+# - Keys: [M]=Masuk (Check-in), [K]=Keluar (Check-out),
+#         [D]=Daftar (Register), [Q]=Keluar Program, [V]=Tes Suara
+# - Voice: English gTTS (online), diputar non-block melalui thread worker
+#          Backend playback: pygame (prioritas) -> playsound (fallback)
+# - Camera: NATURAL (tidak ada filter). UI overlay saja (glass cards, neon).
+# - UI: top/bottom bar, neon buttons, toast, progress ring, equalizer,
+#       modal input nama (di dalam jendela).
+# - Face: HaarCascade + CLAHE + face_recognition (HOG) encodings.
+# - ESP32 hooks: send_event/ping_esp32 selalu ada (fallback aman).
+# ==========================================================
+
+import os
+import sys
+import time
+import uuid
+import tempfile
+import datetime
+import threading
+import queue
+from typing import Optional, Tuple, List
+
+import cv2
+import numpy as np
+import mysql.connector
+import hashlib
+import face_recognition
+
+# ===============================
+# KONFIGURASI
+# ===============================
+ASSISTANT_NAME = "Jarvis"
+
+# Kamera
+CAM_INDEX = 1
+USE_CAP_DSHOW = sys.platform.startswith("win")
+FRAME_WIDTH = 1280
+FRAME_HEIGHT = 720
+
+# Deteksi
+TOLERANCE = 0.5
+SCAN_TIMEOUT_SEC = 2.2
+DETECT_MAX_TRIES = 28
+
+# ESP32 (opsional)
+ESP32_IP = "192.168.0.108"   # ganti sesuai IP; aman jika tidak digunakan
+REQUEST_TIMEOUT = 2
+PERSON_SLOT = 1
+
+# Zona waktu (DB)
+TIME_ZONE_OFFSET = "+07:00"
+TIME_ZONE_LABEL = "WIB"
+
+# Database
+db_config = {
+    "host": "localhost",
+    "user": "root",
+    "password": "",
+    "database": "iot_db",
+}
+
+# Warna (BGR)
+COL_NEON  = (0, 190, 255)
+COL_GOOD  = (0, 230, 140)
+COL_WARN  = (0, 180, 255)
+COL_BAD   = (0,   0, 255)
+COL_TEXT  = (245, 245, 250)
+COL_MUTED = (165, 175, 190)
+COL_CARD  = (42,  42,  58)
+
+# UI Timing
+RIPPLE_TTL = 0.8  # detik
+
+# ===============================
+# TTS: gTTS (online) + pemutar non-block
+# ===============================
+class GTTSPlayer:
+    """
+    Antrian TTS berbasis gTTS:
+    - Generate MP3 di folder temp
+    - Putar secara berurutan di thread worker
+    - Backend playback: pygame (prioritas, non-block di worker) -> playsound (fallback)
+    - Bersihkan file MP3 setelah diputar
+    - Memperbarui flag 'is_speaking' untuk animasi equalizer
+    """
+    def __init__(self, lang="en"):
+        self.lang = lang
+        self._q: "queue.Queue[Optional[str]]" = queue.Queue(maxsize=64)
+        self._stop = threading.Event()
+        self._worker = threading.Thread(target=self._run, daemon=True)
+        self._speaking_until = 0.0
+        self._use_pygame = False
+        self._use_playsound = False
+        self._init_backends()
+        self._worker.start()
+
+    def _init_backends(self):
+        # Coba pygame untuk playback MP3
+        try:
+            import pygame
+            pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=4096)
+            self._use_pygame = True
+        except Exception as e:
+            self._use_pygame = False
+            # Fallback playsound
+            try:
+                import playsound  # noqa
+                self._use_playsound = True
+            except Exception:
+                self._use_playsound = False
+                print("[TTS] Tidak ada backend playback (pygame/playsound). Suara tidak akan diputar.")
+
+    def is_speaking(self) -> bool:
+        return time.time() < self._speaking_until
+
+    def say(self, text: str, interrupt: bool = False):
+        txt = (text or "").strip()
+        if not txt:
+            return
+        # Estimasi durasi (untuk anim EQ)
+        est = max(1.0, len(txt) / 15.0)
+        self._speaking_until = time.time() + est
+        if interrupt:
+            self.clear()
+        try:
+            self._q.put_nowait(txt)
+        except queue.Full:
+            # jika penuh, abaikan agar UI tetap responsif
+            pass
+        print(f"[{ASSISTANT_NAME}]: {txt}")
+
+    def clear(self):
+        try:
+            while not self._q.empty():
+                _ = self._q.get_nowait()
+                self._q.task_done()
+        except Exception:
+            pass
+        # hentikan pygame mixer jika sedang memutar
+        if self._use_pygame:
+            try:
+                import pygame
+                if pygame.mixer.get_init():
+                    pygame.mixer.music.stop()
+            except Exception:
+                pass
+
+    def shutdown(self):
+        self._stop.set()
+        try:
+            self._q.put_nowait(None)
+        except Exception:
+            pass
+        self._worker.join(timeout=2.5)
+        if self._use_pygame:
+            try:
+                import pygame
+                if pygame.mixer.get_init():
+                    pygame.mixer.music.stop()
+                    pygame.mixer.quit()
+            except Exception:
+                pass
+
+    def _unique_mp3(self) -> str:
+        tmp = tempfile.gettempdir()
+        return os.path.join(tmp, f"jarvis_{int(time.time()*1000)}_{uuid.uuid4().hex}.mp3")
+
+    def _play_mp3(self, path: str):
+        played = False
+        if self._use_pygame:
+            try:
+                import pygame
+                pygame.mixer.music.load(path)
+                pygame.mixer.music.play()
+                # Tunggu di thread worker hingga selesai
+                while pygame.mixer.music.get_busy() and not self._stop.is_set():
+                    time.sleep(0.02)
+                played = True
+            except Exception as e:
+                print("[TTS] pygame playback error:", e)
+                played = False
+        if (not played) and self._use_playsound:
+            try:
+                from playsound import playsound
+                playsound(path)  # blocking di worker, aman
+                played = True
+            except Exception as e:
+                print("[TTS] playsound playback error:", e)
+                played = False
+        return played
+
+    def _run(self):
+        while not self._stop.is_set():
+            text = self._q.get()
+            if text is None:
+                break
+            mp3 = None
+            try:
+                from gtts import gTTS
+                mp3 = self._unique_mp3()
+                gTTS(text=text, lang=self.lang).save(mp3)
+                ok = self._play_mp3(mp3)
+                if not ok:
+                    print("[TTS] Tidak ada backend pemutar yang berhasil. Aktifkan pygame atau playsound.")
+            except Exception as e:
+                print("[TTS] gTTS error:", e)
+            finally:
+                try:
+                    if mp3 and os.path.exists(mp3):
+                        os.remove(mp3)
+                except Exception:
+                    pass
+                self._q.task_done()
+
+tts = GTTSPlayer(lang="en")
+voice_en = tts.say  # panggil ini untuk bicara
+
+# ===============================
+# DATABASE HELPERS
+# ===============================
+def get_connection():
+    conn = mysql.connector.connect(**db_config)
+    try:
+        cur = conn.cursor()
+        cur.execute("SET time_zone = %s", (TIME_ZONE_OFFSET,))
+        conn.commit()
+        cur.close()
+    except Exception:
+        pass
+    return conn
+
+def ensure_visit_logs_table():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS visit_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            face_id INT NOT NULL,
+            entry_time DATETIME NOT NULL,
+            exit_time DATETIME NULL,
+            duration_seconds INT NULL
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def fetch_all_encodings() -> Tuple[List[int], List[np.ndarray]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, face_encoding FROM faces")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    ids, encs = [], []
+    for rid, hex_enc in rows:
+        try:
+            ids.append(rid)
+            encs.append(np.frombuffer(bytes.fromhex(hex_enc), dtype=np.float64))
+        except Exception:
+            pass
+    return ids, encs
+
+def insert_face(name: str, encoding: np.ndarray) -> int:
+    enc_hex = encoding.tobytes().hex()
+    fhash = hashlib.sha1(np.round(encoding / np.linalg.norm(encoding), 3).tobytes()).hexdigest()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO faces (name, face_encoding, face_hash, status) VALUES (%s, %s, %s, 'outside')",
+        (name, enc_hex, fhash),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    cur.close()
+    conn.close()
+    return new_id
+
+def get_status(face_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT status FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else None
+
+def set_status(face_id: int, status: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE faces SET status = %s WHERE id = %s", (status, face_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def get_name(face_id: int) -> str:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row and row[0]:
+        return row[0]
+    return f"ID {face_id}"
+
+def get_visit_count(face_id: int) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT visit_count FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else 0
+
+def increment_visit_count(face_id: int, step: int = 1) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE faces SET visit_count = COALESCE(visit_count, 0) + %s WHERE id = %s", (step, face_id))
+    conn.commit()
+    cur.execute("SELECT visit_count FROM faces WHERE id = %s", (face_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else 0
+
+def start_visit(face_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, entry_time
+        FROM visit_logs
+        WHERE face_id=%s AND exit_time IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    """, (face_id,))
+    row = cur.fetchone()
+    if row:
+        log_id, entry_time = row[0], row[1]
+    else:
+        cur.execute("INSERT INTO visit_logs (face_id, entry_time) VALUES (%s, NOW())", (face_id,))
+        conn.commit()
+        log_id = cur.lastrowid
+        cur.execute("SELECT entry_time FROM visit_logs WHERE id=%s", (log_id,))
+        entry_row = cur.fetchone()
+        entry_time = entry_row[0] if entry_row else None
+    cur.close()
+    conn.close()
+    return log_id, entry_time
+
+def end_visit(face_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, entry_time
+        FROM visit_logs
+        WHERE face_id=%s AND exit_time IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    """, (face_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return None, None, None, None
+    log_id, entry_time = row[0], row[1]
+    cur.execute("""
+        UPDATE visit_logs
+        SET exit_time = NOW(),
+            duration_seconds = TIMESTAMPDIFF(SECOND, entry_time, NOW())
+        WHERE id = %s
+    """, (log_id,))
+    conn.commit()
+    cur.execute("SELECT duration_seconds, exit_time FROM visit_logs WHERE id=%s", (log_id,))
+    r2 = cur.fetchone()
+    duration_seconds = int(r2[0]) if r2 and r2[0] is not None else None
+    exit_time = r2[1] if r2 else None
+    cur.close()
+    conn.close()
+    return log_id, duration_seconds, entry_time, exit_time
+
+def count_people_inside() -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM faces WHERE status = 'inside'")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return int(row[0]) if row and row[0] is not None else 0
+
+def list_people_inside() -> List[str]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM faces WHERE status = 'inside' ORDER BY name")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [r[0] for r in rows if r and r[0]]
+
+# ===============================
+# ESP32 (opsional, aman dari NameError)
+# ===============================
+try:
+    import requests
+except Exception:
+    requests = None
+
+def _esp32_enabled() -> bool:
+    if requests is None:
+        return False
+    return isinstance(ESP32_IP, str) and len(ESP32_IP.strip()) > 0
+
+def send_event(face_id: int, event: str, name: str = "", is_new: bool = False):
+    if not _esp32_enabled():
+        return False
+    try:
+        if not name:
+            name = get_name(face_id)
+        url = f"http://{ESP32_IP}/event"
+        data = {"event": event, "id": face_id, "name": name, "new": 1 if is_new else 0, "person": PERSON_SLOT}
+        resp = requests.post(url, json=data, timeout=REQUEST_TIMEOUT)
+        print("[ESP32]", resp.status_code, getattr(resp, "text", ""))
+        return 200 <= resp.status_code < 400
+    except Exception as e:
+        print("[ESP32] not sent:", e)
+        return False
+
+def ping_esp32() -> bool:
+    if not _esp32_enabled():
+        return False
+    try:
+        resp = requests.get(f"http://{ESP32_IP}", timeout=REQUEST_TIMEOUT)
+        return 200 <= resp.status_code < 400
+    except Exception:
+        return False
+
+# ===============================
+# CAMERA & FACE
+# ===============================
+_HAAR = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+def _open_capture():
+    if USE_CAP_DSHOW:
+        cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(CAM_INDEX)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    return cap
+
+def _detect_faces_haar(bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    gray = _CLAHE.apply(gray)  # hanya untuk deteksi; tidak mengubah tampilan kamera
+    faces = _HAAR.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=4, minSize=(110, 110), flags=cv2.CASCADE_SCALE_IMAGE
+    )
+    # pastikan integer: (x,y,w,h)
+    result = []
+    for (x, y, w, h) in faces:
+        result.append((int(x), int(y), int(w), int(h)))
+    return result
+
+def _encode_from_bbox(bgr: np.ndarray, bbox: Tuple[int, int, int, int]) -> Optional[np.ndarray]:
+    x, y, w, h = bbox
+    pad = int(0.18 * max(w, h))
+    x1 = max(0, x - pad); y1 = max(0, y - pad)
+    x2 = min(bgr.shape[1], x + w + pad); y2 = min(bgr.shape[0], y + h + pad)
+    crop = bgr[y1:y2, x1:x2]
+    if crop.size == 0:
+        return None
+    rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+    boxes = face_recognition.face_locations(rgb, model="hog")
+    if not boxes:
+        return None
+    encs = face_recognition.face_encodings(rgb, known_face_locations=boxes)
+    return encs[0] if encs else None
+
+# ===============================
+# ENCODING CACHE
+# ===============================
+ENC_IDS: List[int] = []
+ENC_VECS: List[np.ndarray] = []
+
+def load_encodings_cache():
+    global ENC_IDS, ENC_VECS
+    ENC_IDS, ENC_VECS = fetch_all_encodings()
+    print(f"[⚡] Encodings cached:", len(ENC_IDS))
+
+def add_encoding_to_cache(face_id: int, enc: np.ndarray):
+    ENC_IDS.append(face_id)
+    ENC_VECS.append(enc)
+
+def recognize_face_encoding(enc: np.ndarray) -> Tuple[bool, Optional[int], Optional[float]]:
+    if not ENC_VECS:
+        return False, None, None
+    dists = face_recognition.face_distance(ENC_VECS, enc)
+    idx = int(np.argmin(dists))
+    dist = float(dists[idx])
+    if dist <= TOLERANCE:
+        return True, ENC_IDS[idx], dist
+    return False, None, dist
+
+# ===============================
+# UI UTIL (tanpa mem-filter kamera)
+# ===============================
+def put_text(img, text, org, scale=0.8, color=(255,255,255), thickness=2, shadow=True):
+    x, y = org
+    if shadow:
+        cv2.putText(img, text, (x+2, y+2), cv2.FONT_HERSHEY_SIMPLEX, scale, (0,0,0), thickness+2, cv2.LINE_AA)
+    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
+
+def rounded_card(frame, x1, y1, x2, y2, alpha=0.55, radius=18):
+    """Gambar kartu semi-transparan di area TERBATAS (tidak memfilter frame global)."""
+    overlay = frame.copy()
+    # Rect + sudut bulat
+    cv2.rectangle(overlay, (x1+radius, y1), (x2-radius, y2), COL_CARD, -1)
+    cv2.rectangle(overlay, (x1, y1+radius), (x2, y2-radius), COL_CARD, -1)
+    for (cx, cy) in [(x1+radius, y1+radius), (x2-radius, y1+radius),
+                     (x1+radius, y2-radius), (x2-radius, y2-radius)]:
+        cv2.circle(overlay, (cx, cy), radius, COL_CARD, -1)
+    cv2.addWeighted(overlay, np.clip(alpha, 0, 1), frame, 1-np.clip(alpha, 0, 1), 0, frame)
+
+class Ripple:
+    def __init__(self, center: Tuple[int,int], birth: float):
+        self.center = center
+        self.birth = birth
+    def age(self):
+        return time.time() - self.birth
+    def alive(self):
+        return self.age() < RIPPLE_TTL
+
+def draw_ripples(frame, ripples: List[Ripple]):
+    for r in list(ripples):
+        if not r.alive():
+            ripples.remove(r); continue
+        a = r.age() / RIPPLE_TTL
+        radius = int(40 + a * 160)
+        alpha = max(0.0, 1.0 - a)
+        overlay = frame.copy()
+        cv2.circle(overlay, r.center, radius, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.addWeighted(overlay, 0.15*alpha, frame, 1-0.15*alpha, 0, frame)
+
+class Toast:
+    def __init__(self, text: str, color=(0, 230, 140), ttl=2.2):
+        self.text = text
+        self.color = color
+        self.ttl = ttl
+        self.birth = time.time()
+    def alive(self):
+        return (time.time() - self.birth) < self.ttl
+
+def draw_toasts(frame, toasts: List[Toast]):
+    h, w = frame.shape[:2]
+    y = 120
+    for toast in list(toasts):
+        if not toast.alive():
+            toasts.remove(toast); continue
+        alpha = max(0.35, 1.0 - ((time.time() - toast.birth) / toast.ttl))
+        x1 = 24; x2 = min(w-24, x1 + 24*max(14, len(toast.text)))
+        y1 = y-36; y2 = y+14
+        rounded_card(frame, x1, y1, x2, y2, alpha=alpha, radius=16)
+        put_text(frame, toast.text, (x1+18, y), 0.82, toast.color, 2)
+        y += 56
+
+def draw_equalizer(frame, speaking: bool):
+    h, w = frame.shape[:2]
+    cx, cy = w - 120, 48
+    bars = 6; width = 10; gap = 7
+    t = time.time()
+    for i in range(bars):
+        phase = t * 5 + i*0.65
+        height = int(6 + (18 if speaking else 5) + (16 if speaking else 3) * (0.5 + 0.5*np.sin(phase)))
+        x1 = cx + i*(width+gap); y1 = cy - height//2
+        cv2.rectangle(frame, (x1, y1), (x1+width, y1+height), COL_NEON if speaking else COL_MUTED, -1, cv2.LINE_AA)
+    put_text(frame, "JARVIS" if speaking else "Ready", (cx - 110, cy+10),
+             0.7, COL_TEXT if speaking else COL_MUTED, 2)
+
+def draw_topbar(frame):
+    h, w = frame.shape[:2]
+    rounded_card(frame, 12, 12, w-12, 96, alpha=0.55, radius=18)
+    put_text(frame, f"{ASSISTANT_NAME} - Sistem Akses ({TIME_ZONE_LABEL})", (32, 52), 1.0, COL_NEON, 2)
+    put_text(frame, "[M] Masuk   [K] Keluar   [D] Daftar   [Q] Tutup", (32, 84), 0.82, COL_TEXT, 2)
+
+def draw_bottombar(frame, inside: int, names_line: str, fps: float):
+    h, w = frame.shape[:2]
+    rounded_card(frame, 12, h-116, w-12, h-12, alpha=0.55, radius=18)
+    put_text(frame, f"Di dalam: {inside}", (32, h-66), 0.9, COL_GOOD, 2)
+    put_text(frame, names_line if names_line else "-", (32, h-34), 0.72, COL_MUTED, 2)
+    put_text(frame, datetime.datetime.now().strftime("%H:%M:%S"), (w-220, h-66), 0.9, COL_TEXT, 2)
+    put_text(frame, f"FPS: {fps:.1f}", (w-220, h-34), 0.8, COL_MUTED, 2)
+
+def draw_side_buttons(frame):
+    h, w = frame.shape[:2]
+    x = w - 262
+    btns = [("CHECK-IN [M]", COL_GOOD), ("CHECK-OUT [K]", COL_WARN),
+            ("REGISTER [D]", COL_NEON), ("QUIT [Q]", COL_BAD)]
+    y = 130
+    for text, col in btns:
+        rounded_card(frame, x, y, x+232, y+54, alpha=0.5, radius=20)
+        put_text(frame, text, (x+18, y+36), 0.8, col, 2)
+        y += 66
+
+def draw_face_guide(frame, bbox: Optional[Tuple[int,int,int,int]]):
+    if not bbox: return
+    x,y,w,h = bbox
+    pulse = 0.5 + 0.5*np.sin(time.time()*3.0)
+    c = (int(COL_NEON[0]*(0.7+pulse*0.3)), int(COL_NEON[1]*(0.7+pulse*0.3)), int(COL_NEON[2]*(0.7+pulse*0.3)))
+    t = 3; l = int(min(w,h)*0.23)
+    cv2.line(frame, (x,y), (x+l,y), c, t); cv2.line(frame, (x,y), (x,y+l), c, t)
+    cv2.line(frame, (x+w,y), (x+w-l,y), c, t); cv2.line(frame, (x+w,y), (x+w,y+l), c, t)
+    cv2.line(frame, (x,y+h), (x+l,y+h), c, t); cv2.line(frame, (x,y+h), (x,y+h-l), c, t)
+    cv2.line(frame, (x+w,y+h), (x+w-l,y+h), c, t); cv2.line(frame, (x+w,y+h), (x+w,y+h-l), c, t)
+    put_text(frame, "Arahkan wajah ke bingkai", (x, max(30, y-12)), 0.7, c, 2)
+
+def draw_progress_ring(frame, progress: float, note: str):
+    h, w = frame.shape[:2]
+    center = (w//2, int(h*0.75))
+    radius = 42
+    cv2.circle(frame, center, radius, (80,80,100), 6, cv2.LINE_AA)
+    angle = int(360 * np.clip(progress, 0.0, 1.0))
+    cv2.ellipse(frame, center, (radius, radius), -90, 0, angle, COL_NEON, 6, cv2.LINE_AA)
+    put_text(frame, note, (center[0]-140, center[1]+70), 0.8, COL_TEXT, 2)
+
+# ===============================
+# SCAN & MODAL INPUT (kamera tetap natural)
+# ===============================
+def modal_text_input(cap: cv2.VideoCapture, title="Masukkan Nama", placeholder="ketik di sini...") -> Optional[str]:
+    text = ""
+    blink = True
+    last_blink = time.time()
+    while True:
+        ok, frame = cap.read()
+        if not ok: continue
+
+        inside = count_people_inside()
+        names = list_people_inside()
+        draw_topbar(frame)
+        draw_bottombar(frame, inside, ", ".join(names), 0.0)
+        draw_side_buttons(frame)
+        draw_equalizer(frame, tts.is_speaking())
+
+        h, w = frame.shape[:2]
+        mw, mh = int(w*0.6), 240
+        x1 = (w - mw)//2; y1 = (h - mh)//2
+        x2 = x1 + mw; y2 = y1 + mh
+        rounded_card(frame, x1, y1, x2, y2, alpha=0.72, radius=22)
+        put_text(frame, title, (x1+28, y1+58), 1.0, COL_NEON, 2)
+
+        field_y = y1 + 130
+        rounded_card(frame, x1+24, field_y-40, x2-24, field_y+18, alpha=0.65, radius=14)
+        show = text if text else placeholder
+        col = COL_TEXT if text else COL_MUTED
+        put_text(frame, show, (x1+38, field_y), 0.92, col, 2)
+
+        if time.time() - last_blink > 0.5:
+            blink = not blink; last_blink = time.time()
+        if blink:
+            sz = cv2.getTextSize(show, cv2.FONT_HERSHEY_SIMPLEX, 0.92, 2)[0]
+            cx = x1+38 + sz[0] + 6; cy = field_y - 24
+            cv2.rectangle(frame, (cx, cy), (cx+2, cy+30), COL_NEON, -1)
+
+        put_text(frame, "ENTER: OK   •   ESC: Batal   •   BACKSPACE: Hapus", (x1+28, y2-28), 0.72, COL_MUTED, 2)
+
+        cv2.imshow(WIN_NAME, frame)
+        k = cv2.waitKey(1) & 0xFF
+        if k in (13, 10):  # Enter
+            if text.strip(): return text.strip()
+            else: voice_en("Name cannot be empty.")
+        elif k == 27:  # Esc
+            return None
+        elif k == 8:  # Backspace
+            text = text[:-1] if text else ""
+        elif k == 32:  # Space
+            text += " "
+        elif 32 < k < 127:
+            text += chr(k)
+
+def scan_for_face_encoding(cap: cv2.VideoCapture, timeout_sec=SCAN_TIMEOUT_SEC) -> Tuple[Optional[np.ndarray], Optional[Tuple[int,int,int,int]]]:
+    start = time.time(); tries = 0
+    while time.time() - start < timeout_sec and tries < DETECT_MAX_TRIES:
+        tries += 1
+        ok, frame = cap.read()
+        if not ok: continue
+
+        faces = _detect_faces_haar(frame)
+        bbox = max(faces, key=lambda b: b[2]*b[3]) if faces else None
+        enc = _encode_from_bbox(frame, bbox) if bbox else None
+
+        inside = count_people_inside()
+        names = list_people_inside()
+        draw_topbar(frame)
+        draw_bottombar(frame, inside, ", ".join(names), 0.0)
+        draw_side_buttons(frame)
+        draw_equalizer(frame, tts.is_speaking())
+        if bbox: draw_face_guide(frame, bbox)
+
+        progress = (time.time() - start) / max(0.01, timeout_sec)
+        draw_progress_ring(frame, progress, "Memindai wajah...")
+
+        cv2.imshow(WIN_NAME, frame)
+        k = cv2.waitKey(1) & 0xFF
+        if k in (ord('q'), ord('Q')):
+            return None, None
+        if enc is not None:
+            return enc, bbox
+    return None, None
+
+# ===============================
+# AKSI
+# ===============================
+class ToastList(list):
+    def add(self, msg, color):
+        self.append(Toast(msg, color))
+
+def op_register(cap, toasts: ToastList):
+    voice_en("Command received: Register.")
+    enc, _ = scan_for_face_encoding(cap, timeout_sec=2.4)
+    if enc is None:
+        voice_en("Face not detected.")
+        toasts.add("Wajah tidak terdeteksi", COL_BAD); return
+
+    ok_match, match_id, _ = recognize_face_encoding(enc)
+    if ok_match:
+        nm = get_name(match_id)
+        voice_en(f"Face already registered as {nm}.")
+        toasts.add(f"Sudah terdaftar: {nm}", COL_WARN); return
+
+    name = modal_text_input(cap, "Daftarkan Wajah", "nama lengkap...")
+    if name is None:
+        voice_en("Registration cancelled.")
+        toasts.add("Daftar dibatalkan", COL_WARN); return
+
+    new_id = insert_face(name, enc)
+    add_encoding_to_cache(new_id, enc)
+    send_event(new_id, "daftar", name=name, is_new=True)
+    voice_en(f"Registration completed. Welcome, {name}. ID {new_id}.")
+    toasts.add(f"Daftar OK: {name}", COL_GOOD)
+
+def op_checkin(cap, toasts: ToastList):
+    voice_en("Command received: Check-in.")
+    enc, _ = scan_for_face_encoding(cap, timeout_sec=2.2)
+    if enc is None:
+        voice_en("Face not detected.")
+        toasts.add("Wajah tidak terdeteksi", COL_BAD); return
+
+    ok, face_id, _ = recognize_face_encoding(enc)
+    if not ok:
+        voice_en("Face not recognized. Please register first.")
+        toasts.add("Tidak dikenali", COL_BAD); return
+
+    status = get_status(face_id)
+    if status == "inside":
+        nm = get_name(face_id)
+        voice_en(f"{nm} is already inside.")
+        toasts.add(f"Sudah di dalam: {nm}", COL_WARN); return
+
+    set_status(face_id, "inside")
+    start_visit(face_id)
+    increment_visit_count(face_id, 1)
+    send_event(face_id, "masuk")
+    nm = get_name(face_id)
+    voice_en(f"Check-in successful. Welcome, {nm}.")
+    toasts.add(f"Masuk: {nm}", COL_GOOD)
+
+def op_checkout(cap, toasts: ToastList):
+    voice_en("Command received: Check-out.")
+    enc, _ = scan_for_face_encoding(cap, timeout_sec=2.2)
+    if enc is None:
+        voice_en("Face not detected.")
+        toasts.add("Wajah tidak terdeteksi", COL_BAD); return
+
+    ok, face_id, _ = recognize_face_encoding(enc)
+    if not ok:
+        voice_en("Face not recognized.")
+        toasts.add("Tidak dikenali", COL_BAD); return
+
+    status = get_status(face_id)
+    if status != "inside":
+        nm = get_name(face_id)
+        voice_en(f"{nm} is not currently inside.")
+        toasts.add(f"Tidak di dalam: {nm}", COL_WARN); return
+
+    set_status(face_id, "outside")
+    _, duration_seconds, _, _ = end_visit(face_id)
+    send_event(face_id, "keluar")
+    nm = get_name(face_id)
+    voice_en(f"Check-out complete. Duration {duration_seconds or 0} seconds. Goodbye, {nm}.")
+    toasts.add(f"Keluar: {nm} ({duration_seconds or 0}s)", COL_GOOD)
+
+# ===============================
+# UTIL WAKTU
+# ===============================
+def time_of_day_label(now: Optional[datetime.datetime] = None) -> str:
+    if now is None: now = datetime.datetime.now()
+    h = now.hour
+    if   5 <= h <= 10: return "Pagi"
+    elif 11 <= h <= 14: return "Siang"
+    elif 15 <= h <= 18: return "Sore"
+    else: return "Malam"
+
+# ===============================
+# MAIN LOOP
+# ===============================
+WIN_NAME = "Akses – Jarvis (M/K/D/Q)"
+
+def main():
+    ensure_visit_logs_table()
+    load_encodings_cache()
+
+    greet = time_of_day_label()
+    voice_en(f"Good {greet.lower() if greet!='Malam' else 'evening'}. System is ready.")
+    voice_en("Press M to check in, K to check out, D to register, or Q to quit.")
+
+    if _esp32_enabled():
+        if ping_esp32():
+            voice_en("ESP32 device is connected.")
+        else:
+            voice_en("ESP32 device not responding. Proceeding without it.")
+
+    cap = _open_capture()
+    if not cap.isOpened():
+        print("[❌] Kamera gagal dibuka."); return
+
+    cv2.namedWindow(WIN_NAME, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(WIN_NAME, FRAME_WIDTH, FRAME_HEIGHT)
+
+    # FPS & UI states
+    prev = time.time(); frame_count = 0; fps = 0.0
+    toasts = ToastList()
+    ripples: List[Ripple] = []
+
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                cap.release(); time.sleep(0.2); cap = _open_capture(); continue
+
+            # Face guide ringan
+            faces = _detect_faces_haar(frame)
+            bbox = max(faces, key=lambda b: b[2]*b[3]) if faces else None
+            if bbox: draw_face_guide(frame, bbox)
+
+            # HUD
+            inside = count_people_inside()
+            names = list_people_inside()
+
+            # FPS
+            frame_count += 1
+            now = time.time()
+            if now - prev >= 1.0:
+                fps = frame_count / (now - prev); frame_count = 0; prev = now
+
+            draw_topbar(frame)
+            draw_bottombar(frame, inside, ", ".join(names), fps)
+            draw_side_buttons(frame)
+            draw_equalizer(frame, tts.is_speaking())
+            draw_ripples(frame, ripples)
+            draw_toasts(frame, toasts)
+
+            cv2.imshow(WIN_NAME, frame)
+            key = cv2.waitKey(1) & 0xFF
+
+            if key in (ord('m'), ord('M')):
+                ripples.append(Ripple((FRAME_WIDTH//2, FRAME_HEIGHT//2), time.time()))
+                toasts.add("Proses: MASUK", COL_WARN)
+                op_checkin(cap, toasts)
+            elif key in (ord('k'), ord('K')):
+                ripples.append(Ripple((FRAME_WIDTH//2, FRAME_HEIGHT//2), time.time()))
+                toasts.add("Proses: KELUAR", COL_WARN)
+                op_checkout(cap, toasts)
+            elif key in (ord('d'), ord('D')):
+                ripples.append(Ripple((FRAME_WIDTH//2, FRAME_HEIGHT//2), time.time()))
+                toasts.add("Proses: DAFTAR", COL_WARN)
+                op_register(cap, toasts)
+            elif key in (ord('q'), ord('Q')):
+                voice_en("Command received: Quit. Shutting down. Goodbye!")
+                break
+            elif key in (ord('v'), ord('V')):  # Tes cepat TTS kapan pun
+                voice_en("This is a quick voice test. Jarvis is speaking.")
+            # else: lanjut loop
+
+    except KeyboardInterrupt:
+        print("\n[⏹️] Dihentikan oleh pengguna.")
+    finally:
+        try: cap.release()
+        except Exception: pass
+        cv2.destroyAllWindows()
+        tts.shutdown()
+
+if __name__ == "__main__":
+    main()

@@ -2,11 +2,11 @@
 #include <Servo.h>
 
 // ===== Pin Sensor HW-201 =====
-const int sensorOutPin = 2; // Sensor HW untuk ORANG KELUAR
-const int sensorInPin  = 4; // Sensor HW untuk ORANG MASUK
+const int sensorOutPin = 4; // Sensor HW untuk ORANG KELUAR
+const int sensorInPin  = 5; // Sensor HW untuk ORANG MASUK
 
 // ===== Pin Buzzer =====
-const int buzzerPin = 7;
+const int buzzerPin = 13;
 
 // ===== Pin Servo =====
 const int servoInPin  = 9; // Servo untuk orang masuk
